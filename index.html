@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#87CEEB" />
+  <title>数字积木 · 第一集：一</title>
+  <link rel="stylesheet" href="style.css?v=1" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" aria-label="数字积木游戏画布"></canvas>
+    <div id="hud" class="hud">
+      <div id="episode-tag">第一集 · 一</div>
+      <button id="btn-skip" class="ghost" type="button" hidden>跳过引导</button>
+    </div>
+    <div id="overlay" class="overlay" hidden>
+      <div class="card" id="card">
+        <h1 id="card-title"></h1>
+        <p id="card-body"></p>
+        <div class="btn-row" id="card-btns"></div>
+      </div>
+    </div>
+    <div id="speech" class="speech" hidden>
+      <div class="speech-bubble" id="speech-text"></div>
+    </div>
+  </div>
+  <script src="game.js?v=1"></script>
+</body>
+</html>
