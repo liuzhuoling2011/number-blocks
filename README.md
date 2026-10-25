@@ -20,7 +20,7 @@
 
 ## 已知限制
 
-花、蜜蜂、太阳这一轮是程序化的软塑料占位，方便先把这一关玩厚。定稿模型会是 `flower.glb`、`bee.glb`、`sun.glb`，还没放进 `public/models/`。`one.glb`（One v9）和 `pad.glb`（Pad v5）仍是定稿，没有换掉。
+花、蜜蜂、太阳、地面、小屋和树石草都用 `public/models/` 里的定稿 glb。远处的大草地和山丘仍是程序画的，不挡操作。小屋和装饰摆在拖动路线和三个点击区外面；很窄的手机竖屏上，最边上的树可能被裁掉一点。
 
 ## 本地运行
 
@@ -46,9 +46,10 @@ Vite `base` 为 `/number-blocks/`。
 
 - `src/levels/level01/` — 第一集（标题 → 见面 → 寻找 → 回家 → 通关）
 - `src/levels/index.ts` — 以后加关卡时从这里注册
-- `public/models/` — `one.glb`（One v9）、`pad.glb`（Pad v5）
+- `public/models/` — `one.glb`、`pad.glb`、`flower.glb`、`bee.glb`、`sun.glb`、`ground.glb`、`home_hut.glb`、`tree_a.glb`、`rock_a.glb`、`grass_clump.glb`
 - `public/previews/` — `one-v9.png`、`pad-v5.png`
 - `docs/ep01-one-design-v2.md` — 第一集加厚策划（当前玩法）
+- `docs/ep01-scene-art-brief.md` — 第一集场景与道具摆放
 - `docs/ep01-one-design.md` — 第一集薄版策划
 - `docs/style-guide-v0.1.md` — 造型规范
 
@@ -76,7 +77,7 @@ Mouse and touch both work. The button at the top right mutes the sounds.
 
 ## Known limits
 
-The flower, bee, and sun are procedural soft-plastic stand-ins for this pass. Final models would be `flower.glb`, `bee.glb`, and `sun.glb`; they are not in `public/models/` yet. `one.glb` (One v9) and `pad.glb` (Pad v5) stay as the approved art.
+The flower, bee, sun, ground, hut, trees, rocks, and grass clumps are the final glb files in `public/models/`. The far meadow plane and hills are still procedural and sit outside the play disc. The hut and decoration stay off the drag path and the three tap zones; on a very narrow phone the outermost trees can clip the frame edge.
 
 ## Run locally
 
@@ -100,7 +101,8 @@ GitHub Pages for this repo publishes the **root of `main`** (there is no `gh-pag
 
 - `src/levels/level01/` — episode one (`TITLE → MEET → FIND → HOME → CLEAR`)
 - `src/levels/index.ts` — where later episodes get registered
-- `public/models/` — `one.glb` (One v9) and `pad.glb` (Pad v5)
+- `public/models/` — `one.glb`, `pad.glb`, `flower.glb`, `bee.glb`, `sun.glb`, `ground.glb`, `home_hut.glb`, `tree_a.glb`, `rock_a.glb`, `grass_clump.glb`
 - `public/previews/` — `one-v9.png` and `pad-v5.png`
 - `docs/ep01-one-design-v2.md` — thickened episode design (current play)
+- `docs/ep01-scene-art-brief.md` — episode-one scene and prop placement
 - `docs/` — also the thin v1 design and the style guide

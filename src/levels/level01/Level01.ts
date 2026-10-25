@@ -8,8 +8,10 @@ import { frameCamera } from './frame.ts';
 import { HOME, PAD, PAD_RADIUS } from './layout.ts';
 import { buildMeadow } from './meadow.ts';
 import type { Meadow } from './meadow.ts';
-import { buildFindProps } from './props.ts';
+import { loadFindProps } from './props.ts';
 import type { FindProps, PropId } from './props.ts';
+import { loadScenery } from './scenery.ts';
+import type { Scenery } from './scenery.ts';
 
 /** TITLE → MEET → FIND → HOME → CLEAR. HOME is the old drag-to-pad play. */
 type Phase = 'boot' | 'title' | 'meet' | 'find' | 'home' | 'clear' | 'error';
@@ -68,6 +70,7 @@ export class Level01 {
   private guide: THREE.Group | null = null;
   private guideMat: THREE.MeshBasicMaterial | null = null;
   private findProps: FindProps | null = null;
+  private scenery: Scenery | null = null;
 
   private phase: Phase = 'boot';
   private motion: Motion = 'idle';
@@ -141,6 +144,7 @@ export class Level01 {
     cancelAnimationFrame(this.raf);
     this.clearConfetti();
     this.findProps?.dispose();
+    this.scenery?.dispose();
     this.boxGeo?.dispose();
     this.dotGeo?.dispose();
     this.renderer?.dispose();
@@ -291,7 +295,6 @@ export class Level01 {
     this.guide = guide;
     this.guideMat = guideMat;
     this.scene.add(guide);
-    this.findProps = buildFindProps(this.scene, this.reduceMotion);
     this.onResize();
     const fov = frameCamera(this.camera.aspect, this.viewW, 'title', this.camTarget, this.lookTarget);
     this.camera.position.copy(this.camTarget);
@@ -304,8 +307,15 @@ export class Level01 {
 
   private async loadModels(): Promise<void> {
     if (!this.scene || !this.renderer || !this.oneModel) return;
-    this.actors = await loadActors(this.scene, this.renderer);
-    this.oneModel.add(this.actors.oneRoot);
+    const [actors, props, scenery] = await Promise.all([
+      loadActors(this.scene, this.renderer),
+      loadFindProps(this.scene, this.reduceMotion),
+      loadScenery(this.scene),
+    ]);
+    this.actors = actors;
+    this.oneModel.add(actors.oneRoot);
+    this.findProps = props;
+    this.scenery = scenery;
   }
 
   private loop = (now: number): void => {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from './gltf.ts';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { PAD } from './layout.ts';
 
@@ -179,12 +179,7 @@ export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRender
   });
   pmrem.dispose();
 
-  const loader = new GLTFLoader();
-  const modelUrl = (file: string) => `${import.meta.env.BASE_URL}models/${file}`;
-  const [oneGltf, padGltf] = await Promise.all([
-    loader.loadAsync(modelUrl('one.glb')),
-    loader.loadAsync(modelUrl('pad.glb')),
-  ]);
+  const [oneGltf, padGltf] = await Promise.all([loadModel('one.glb'), loadModel('pad.glb')]);
 
   const oneRoot = oneGltf.scene.getObjectByName('One');
   const pad = padGltf.scene.getObjectByName('Pad');

@@ -136,21 +136,9 @@ export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
     }),
   );
   grass.rotation.x = -Math.PI / 2;
+  grass.position.y = -0.08;
   grass.receiveShadow = true;
   scene.add(grass);
-
-  const stage = new THREE.Mesh(
-    new THREE.CircleGeometry(3.15, 48),
-    new THREE.MeshBasicMaterial({
-      color: 0xd4f0b8,
-      transparent: true,
-      opacity: 0.28,
-      depthWrite: false,
-    }),
-  );
-  stage.rotation.x = -Math.PI / 2;
-  stage.position.y = 0.006;
-  scene.add(stage);
 
   const hills: { p: [number, number, number]; s: [number, number, number]; c: number }[] = [
     { p: [-3.6, 0.15, -6.4], s: [2.7, 0.82, 1.7], c: 0xd5e3d2 },
@@ -169,7 +157,7 @@ export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
 
   return {
     update() {
-      /* Hills and grass stay still. FIND props animate themselves. */
+      /* Far hills stay still. The playable disc is ground.glb. */
     },
   };
 }
