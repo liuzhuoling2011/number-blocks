@@ -97,11 +97,11 @@ export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   scene.fog = new THREE.Fog(0xf4efe6, 18, 36);
   scene.add(makeSky());
 
-  const hemi = new THREE.HemisphereLight(0xfff8f1, 0x86b86e, 0.78);
+  const hemi = new THREE.HemisphereLight(0xfff4e8, 0x8cbc72, 0.48);
   scene.add(hemi);
-  scene.add(new THREE.AmbientLight(0xfff5ee, 0.32));
+  scene.add(new THREE.AmbientLight(0xfff2e6, 0.06));
 
-  const key = new THREE.DirectionalLight(0xfff4e6, 2.55);
+  const key = new THREE.DirectionalLight(0xfff1e2, 1.65);
   key.position.set(3.2, 7.6, 4.8);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -113,15 +113,16 @@ export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   key.shadow.camera.bottom = -7;
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.03;
-  key.shadow.intensity = 0.42;
+  key.shadow.intensity = 0.62;
+  key.shadow.radius = 2.5;
   scene.add(key);
   scene.add(key.target);
 
-  const fill = new THREE.DirectionalLight(0xffd9ce, 0.85);
+  const fill = new THREE.DirectionalLight(0xffe6d6, 0.22);
   fill.position.set(-4.4, 3.2, 3.6);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(0xffffff, 0.28);
+  const rim = new THREE.DirectionalLight(0xfff6ee, 0.08);
   rim.position.set(-1.5, 4.2, -4.5);
   scene.add(rim);
 

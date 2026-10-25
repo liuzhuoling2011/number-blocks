@@ -39,6 +39,10 @@ function blobTexture(): THREE.CanvasTexture {
 
 function tuneStandard(mat: THREE.MeshStandardMaterial, intensity: number): void {
   mat.envMapIntensity = intensity;
+  // Body albedo bakes a peach highlight. Pull green/blue down so the block
+  // reads as the mood-board crimson instead of orange glass.
+  if (mat.name === 'BodyPlastic') mat.color.setRGB(1.08, 0.24, 0.26);
+  else if (mat.name === 'FootPlastic') mat.color.setRGB(1.02, 0.42, 0.4);
   if (mat.transparent) {
     mat.depthWrite = false;
   }
@@ -81,12 +85,12 @@ function prepareOne(one: THREE.Object3D): { pick: THREE.Object3D[]; eyes: EyeRig
       return;
     }
 
-    if (obj.name === 'EyeL' || obj.name === 'EyeR') tuneStandard(mat, 0.72);
-    else if (parent === 'EyeL' || parent === 'EyeR') tuneStandard(mat, 0.28);
-    else if (obj.name === 'FootL' || obj.name === 'FootR') tuneStandard(mat, 0.32);
-    else if (obj.name === 'Smile') tuneStandard(mat, 0.18);
-    else if (mat.transparent) tuneStandard(mat, 0.12);
-    else tuneStandard(mat, 0.55);
+    if (obj.name === 'EyeL' || obj.name === 'EyeR') tuneStandard(mat, 0.4);
+    else if (parent === 'EyeL' || parent === 'EyeR') tuneStandard(mat, 0.16);
+    else if (obj.name === 'FootL' || obj.name === 'FootR') tuneStandard(mat, 0.2);
+    else if (obj.name === 'Smile') tuneStandard(mat, 0.12);
+    else if (mat.transparent) tuneStandard(mat, 0.1);
+    else tuneStandard(mat, 0.22);
 
     const skipShadow = mat.transparent || obj.name === 'ContactShadow';
     obj.castShadow = !skipShadow;
@@ -169,7 +173,7 @@ export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRender
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture;
-  scene.environmentIntensity = 0.85;
+  scene.environmentIntensity = 0.34;
   room.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
     obj.geometry.dispose();

@@ -21,7 +21,7 @@ function shade(root: THREE.Object3D, cast: boolean): void {
     obj.castShadow = cast && !ghost;
     obj.receiveShadow = true;
     for (const mat of list) {
-      if (mat instanceof THREE.MeshStandardMaterial) mat.envMapIntensity = 0.4;
+      if (mat instanceof THREE.MeshStandardMaterial) mat.envMapIntensity = 0.2;
     }
   });
 }
