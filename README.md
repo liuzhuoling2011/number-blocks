@@ -1,48 +1,90 @@
-# 数字积木 · 第一集：一
+# 数字积木
 
-面向幼儿（约 3–6 岁）的 **Three.js 精致 3D** 小游戏原型。用**原创**彩色数字积木，在柔和光影的小草甸里认识「一」。
+在线试玩：https://liuzhuoling2011.github.io/number-blocks/
 
-> 本项目**不是** BBC / Blue Zoo《Numberblocks》翻版，也**不是**塞尔达系列素材。角色、场景、音效均为原创；画面气质参考常见 3A 冒险游戏的「柔和光照 + 清晰剪影」，但不使用任何官方资源。
+给小朋友的数字启蒙小游戏。第一集大约 30 秒可以玩完：认识红色积木「一」，把它拖到发光的圈圈上。
 
-## 在线试玩
+美术是原创的软塑料积木，不是任何播出节目的素材。
 
-https://liuzhuoling2011.github.io/number-blocks/
+## 玩法
 
-手机浏览器打开；支持触摸拖拽。首次点击会解锁音效。
+1. 打开页面，点 **开始**。
+2. 按住红色的「一」，拖到右边发光的圈圈里，松手。
+3. 放对了会吸过去，跳一下，然后出现「太棒了！」。
+4. 放偏了会弹回原处，可以一直试。没有倒计时，也没有失败。
 
-## 第一集流程（约 1～2 分钟）
+手机和电脑都可以玩。点右上角可以关掉声音。
 
-1. 开场推镜，「一」出现并自我介绍  
-2. 拖拽红色方块；点太阳 / 树 / 蜜蜂，每样显示「1」并有音效  
-3. 从积木盒拖出一块放到光圈上  
-4. 庆祝彩带 + 成功和弦；可再玩一次（「二」未开放）
-
-放错会弹回，没有失败惩罚。
-
-## 画面（v7）
-
-- 「一」：高分段圆角方块 + PBR 塑料贴图 + 立体五官/徽章/小脚 + 接触阴影
-- 蜜蜂：胸腹分节、黄黑条纹、尾刺、触角、六腿、半透明扑翅（一眼可辨）
-- 树：分段树干/树根 + 多层噪波树冠；太阳：球核 + 锥形射线 + 光晕
-- 起伏草地、草簇、花、石、远山雾气；RoomEnvironment 反射
-
-## 技术要点
-
-- Three.js r170（本地 `vendor/`，圆角方块 + 软阴影 + ACES 色调）
-- Web Audio 合成音效（出现 / 拾取 / 放下 / 数 1 / 成功）
-- `devicePixelRatio` 适配高分屏；大热区触摸
-- 简体中文 UI
-
-## 本地预览
-
-需本地静态服务（ES Module）：
+## 本地运行
 
 ```bash
-cd number-blocks
-python3 -m http.server 8080
-# 打开 http://localhost:8080
+npm install
+npm run dev
 ```
 
-## 许可说明
+浏览器打开 http://127.0.0.1:4731/number-blocks/
 
-代码与原创美术/音效供学习与家庭自用。请勿嵌入任何《Numberblocks》或《塞尔达》官方视频、立绘、音乐或商标。
+生产构建：
+
+```bash
+npm run build
+npm run preview
+```
+
+Vite `base` 为 `/number-blocks/`。
+
+这个仓库的 GitHub Pages 从 **`main` 分支根目录**发布（没有 `gh-pages` 分支）。`npm run build` 会把构建结果同步到仓库根目录的 `pages-entry.js` 和 `assets/`，合并到 `main` 后，上面的网址就是这版重制。`.github/workflows/deploy.yml` 会在推送到 `main` 时再用 GitHub Actions 部署 `dist`；Pages 来源改成 GitHub Actions 之后，以该工作流为准。
+
+## 目录
+
+- `src/levels/level01/` — 第一集（标题 → 游玩 → 通关）
+- `src/levels/index.ts` — 以后加关卡时从这里注册
+- `public/models/` — `one.glb`（One v9）、`pad.glb`（Pad v5）
+- `public/previews/` — `one-v9.png`、`pad-v5.png`
+- `docs/ep01-one-design.md` — 第一集策划
+- `docs/style-guide-v0.1.md` — 造型规范
+
+---
+
+# Number Blocks
+
+Play it: https://liuzhuoling2011.github.io/number-blocks/
+
+A short counting toy for young children. Episode One takes about half a minute: meet the red block called One, and drag it onto the glowing pad.
+
+The models are original soft-plastic blocks. They are not artwork from any broadcast show.
+
+## How to play
+
+1. Open the page and press **开始** (Start).
+2. Press and drag the red One onto the glowing ring, then let go.
+3. A good drop snaps into place, celebrates, and shows the clear card.
+4. A miss hops back home. There is no timer and no fail state.
+
+Mouse and touch both work. The button at the top right mutes the sounds.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+Then open http://127.0.0.1:4731/number-blocks/
+
+```bash
+npm run build
+npm run preview
+```
+
+Vite `base` is `/number-blocks/`.
+
+GitHub Pages for this repo publishes the **root of `main`** (there is no `gh-pages` branch). `npm run build` syncs the playable build to `pages-entry.js` and `assets/` in the repo root, so a merge to `main` is what the live URL serves. `.github/workflows/deploy.yml` also deploys `dist` with GitHub Actions on each push to `main`; that workflow is the publisher once the Pages source is set to GitHub Actions.
+
+## Layout
+
+- `src/levels/level01/` — episode one (`TITLE → PLAY → CLEAR`)
+- `src/levels/index.ts` — where later episodes get registered
+- `public/models/` — `one.glb` (One v9) and `pad.glb` (Pad v5)
+- `public/previews/` — `one-v9.png` and `pad-v5.png`
+- `docs/` — episode design and the style guide
