@@ -13,6 +13,8 @@ export type Actors = {
   shadowMat: THREE.MeshBasicMaterial;
   pad: THREE.Object3D;
   ringMat: THREE.MeshStandardMaterial | null;
+  /** Extra concentric vermillion bands. The glTF ring is `ringMat`. */
+  bandMats: THREE.MeshStandardMaterial[];
   padDigit: THREE.Object3D | null;
   padDigitBaseY: number;
   glowMat: THREE.MeshBasicMaterial;
@@ -27,8 +29,8 @@ function blobTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('无法绘制阴影');
   const grd = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.5);
-  grd.addColorStop(0, 'rgba(48, 32, 24, 0.5)');
-  grd.addColorStop(0.5, 'rgba(48, 32, 24, 0.18)');
+  grd.addColorStop(0, 'rgba(42, 28, 18, 0.66)');
+  grd.addColorStop(0.42, 'rgba(42, 28, 18, 0.24)');
   grd.addColorStop(1, 'rgba(48, 32, 24, 0)');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, size, size);
@@ -121,52 +123,73 @@ function preparePad(pad: THREE.Object3D): {
     obj.receiveShadow = false;
     if (obj.name === 'Ring') {
       ringMat = mat;
+      mat.color.set('#e4372c');
+      mat.emissive.set('#c43224');
+      mat.emissiveIntensity = 0.3;
+      mat.roughness = 0.46;
+      mat.metalness = 0.02;
+      mat.opacity = 1;
+      mat.transparent = false;
+      mat.depthWrite = true;
+      mat.side = THREE.DoubleSide;
       obj.renderOrder = 3;
     }
-    if (obj.name === 'Plate') obj.renderOrder = 2;
+    if (obj.name === 'Plate') obj.visible = false;
+    if (obj.name === 'DigitOneMesh') {
+      mat.color.set('#d22722');
+      mat.emissive.set('#6a1612');
+      mat.emissiveIntensity = 0.18;
+      mat.roughness = 0.4;
+    }
   });
-  if (padDigit) padDigit.renderOrder = 4;
-  return { ringMat, padDigit, padDigitBaseY: padDigit?.position.y ?? 0.42 };
+  if (padDigit) {
+    padDigit.position.y = 0.1;
+    padDigit.renderOrder = 5;
+  }
+  return { ringMat, padDigit, padDigitBaseY: padDigit?.position.y ?? 0.1 };
 }
 
-function glowTexture(): THREE.CanvasTexture {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('无法绘制光圈');
-  const grd = ctx.createRadialGradient(size / 2, size / 2, size * 0.18, size / 2, size / 2, size * 0.5);
-  grd.addColorStop(0, 'rgba(255, 150, 130, 0)');
-  grd.addColorStop(0.42, 'rgba(255, 110, 90, 0.28)');
-  grd.addColorStop(0.72, 'rgba(255, 90, 70, 0.45)');
-  grd.addColorStop(1, 'rgba(255, 80, 60, 0)');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+function addPadBands(pad: THREE.Object3D): THREE.MeshStandardMaterial[] {
+  const bands = [
+      { inner: 0.34, outer: 0.5, color: '#e23d2e', emissive: '#b4231c', intensity: 0.28 },
+    { inner: 0.9, outer: 1.06, color: '#ef4d34', emissive: '#c42e22', intensity: 0.34 },
+    { inner: 1.18, outer: 1.32, color: '#c43228', emissive: '#9a241c', intensity: 0.22 },
+  ];
+  const mats: THREE.MeshStandardMaterial[] = [];
+  bands.forEach((band, index) => {
+    const mat = new THREE.MeshStandardMaterial({
+      color: band.color,
+      emissive: band.emissive,
+      emissiveIntensity: band.intensity,
+      roughness: 0.46,
+      metalness: 0.02,
+      side: THREE.DoubleSide,
+    });
+    mat.userData.baseEmissive = band.intensity;
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(band.inner, band.outer, 72), mat);
+    mesh.name = 'PadRingBand';
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = 0.034 + index * 0.003;
+    mesh.renderOrder = 3;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    pad.add(mesh);
+    mats.push(mat);
+  });
+  return mats;
 }
 
-function addPadGlow(pad: THREE.Object3D): { glowMat: THREE.MeshBasicMaterial; glow: THREE.PointLight } {
-  const glowMat = new THREE.MeshBasicMaterial({
-    map: glowTexture(),
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-  });
-  const disc = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 3.1), glowMat);
-  disc.name = 'PadGlow';
-  disc.rotation.x = -Math.PI / 2;
-  disc.position.y = 0.008;
-  disc.renderOrder = 1;
-
-  const glow = new THREE.PointLight(0xff6d5c, 1.15, 2.6, 2);
-  glow.position.set(0, 0.18, 0);
-  pad.add(disc, glow);
-  return { glowMat, glow };
+function addPadGlow(pad: THREE.Object3D): {
+  glowMat: THREE.MeshBasicMaterial;
+  glow: THREE.PointLight;
+  bandMats: THREE.MeshStandardMaterial[];
+} {
+  const bandMats = addPadBands(pad);
+  const glowMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const glow = new THREE.PointLight(0xff3a2c, 0.03, 2.2, 2);
+  glow.position.set(0, 0.2, 0);
+  pad.add(glow);
+  return { glowMat, glow, bandMats };
 }
 
 export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Promise<Actors> {
@@ -203,7 +226,7 @@ export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRender
     depthWrite: false,
     toneMapped: false,
   });
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.05), shadowMat);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.92), shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.018;
   shadow.renderOrder = 2;
@@ -217,6 +240,7 @@ export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRender
     shadowMat,
     pad,
     ringMat: padBits.ringMat,
+    bandMats: glowBits.bandMats,
     padDigit: padBits.padDigit,
     padDigitBaseY: padBits.padDigitBaseY,
     glowMat: glowBits.glowMat,

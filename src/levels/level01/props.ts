@@ -117,14 +117,17 @@ function shade(root: THREE.Object3D): void {
     obj.castShadow = !transparent;
     obj.receiveShadow = !transparent;
     for (const mat of list) {
-      if (mat instanceof THREE.MeshStandardMaterial) mat.envMapIntensity = 0.22;
+      if (mat instanceof THREE.MeshStandardMaterial) {
+        mat.envMapIntensity = mat.transparent ? 0.12 : 0.18;
+        if (!mat.transparent && mat.roughness < 0.42) mat.roughness = 0.48;
+      }
     }
   });
 }
 
 const BADGE_Y: Record<PropId, number> = { flower: 1.22, bee: 0.62, sun: 1.2 };
-const HIT_Y: Record<PropId, number> = { flower: 0.72, bee: 0.08, sun: 0 };
-const HIT_R: Record<PropId, number> = { flower: 0.58, bee: 0.56, sun: 0.78 };
+const HIT_Y: Record<PropId, number> = { flower: 0.55, bee: 0.08, sun: 0 };
+const HIT_R: Record<PropId, number> = { flower: 0.46, bee: 0.5, sun: 0.72 };
 
 export async function loadFindProps(scene: THREE.Scene, reduceMotion: boolean): Promise<FindProps> {
   const [flowerGltf, beeGltf, sunGltf] = await Promise.all([
@@ -148,9 +151,11 @@ export async function loadFindProps(scene: THREE.Scene, reduceMotion: boolean): 
     const root = new THREE.Group();
     root.name = id;
     root.position.set(spot.x, spot.y, spot.z);
+    root.scale.setScalar(spot.scale);
     const visual = new THREE.Group();
     visual.add(model);
     const hit = makeHit(HIT_R[id], id, HIT_Y[id]);
+    hit.scale.setScalar(1 / spot.scale);
     const badge = makeBadge(badgeTex, BADGE_Y[id]);
     root.add(visual, hit, badge);
     const rig: PropRig = {

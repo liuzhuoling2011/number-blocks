@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 
 const TITLE_DIR = new THREE.Vector3(0.08, 0.98, 1.55).normalize();
-const PLAY_DIR = new THREE.Vector3(0.04, 1.08, 1.52).normalize();
+const PLAY_DIR = new THREE.Vector3(0.05, 0.24, 1.92).normalize();
 
 /**
- * Keep One and the pad a similar size on phone and desktop.
- * Width is solved in pixels; distance follows from the horizontal field of view.
- * `stage` is a little wider than the old play frame so the flower, bee, and sun
- * stay on screen with One and the pad.
+ * Stage is a step closer than the wide exploration frame, still wide enough
+ * that the sun's rays and the flower stay inside a phone portrait.
+ * It is not the mood-board hero crop. See docs/ep01-mood-gap-checklist.md.
  */
 export function frameCamera(
   aspect: number,
@@ -19,19 +18,19 @@ export function frameCamera(
   const title = phase === 'title';
   const portrait = aspect < 0.85;
   const fov = portrait ? (title ? 36 : 34) : title ? 32 : 30;
-  const lookY = title ? (portrait ? 0.05 : 0.28) : portrait ? 0.72 : 0.66;
+  const lookY = title ? (portrait ? 0.05 : 0.28) : portrait ? 0.5 : 0.56;
   outLook.set(0, lookY, 0);
 
-  const charPx = THREE.MathUtils.clamp(viewWidthPx * (portrait ? 0.28 : 0.22), 108, 340);
+  const charPx = THREE.MathUtils.clamp(viewWidthPx * (portrait ? 0.3 : 0.24), 108, 340);
   let worldWidth = viewWidthPx / (charPx / 1.05);
-  worldWidth = Math.max(worldWidth, title ? (portrait ? 3.85 : 4.15) : portrait ? 5.2 : 5.5);
+  worldWidth = Math.max(worldWidth, title ? (portrait ? 3.85 : 4.15) : portrait ? 4.75 : 4.7);
 
   const safeAspect = Math.max(0.38, aspect);
   const vfov = THREE.MathUtils.degToRad(fov);
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * safeAspect);
   let dist = worldWidth / (2 * Math.tan(hfov / 2));
 
-  const minHalfHeight = title ? 2.35 : 2.55;
+  const minHalfHeight = title ? 2.35 : 2.02;
   const halfH = dist * Math.tan(vfov / 2);
   if (halfH < minHalfHeight) dist *= minHalfHeight / halfH;
 

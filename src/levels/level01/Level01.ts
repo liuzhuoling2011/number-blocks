@@ -5,7 +5,7 @@ import { loadActors } from './actors.ts';
 import type { Actors } from './actors.ts';
 import { copy } from './copy.ts';
 import { frameCamera } from './frame.ts';
-import { HOME, PAD, PAD_RADIUS } from './layout.ts';
+import { FIND_LAYOUT, HOME, PAD, PAD_RADIUS } from './layout.ts';
 import { buildMeadow } from './meadow.ts';
 import type { Meadow } from './meadow.ts';
 import { loadFindProps } from './props.ts';
@@ -267,11 +267,11 @@ export class Level01 {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setClearColor(0xf4efe6);
+    this.renderer.setClearColor(0xf7f1e6);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 120);
-    this.meadow = buildMeadow(this.scene, this.renderer);
+    this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
+    this.meadow = buildMeadow(this.scene);
 
     this.oneRig = new THREE.Group();
     this.oneModel = new THREE.Group();
@@ -344,12 +344,49 @@ export class Level01 {
     this.updateGuide(time);
     this.updateConfetti(dt);
     this.updateBubble();
+    this.publishShot();
+  }
+
+  /** Screen points for the local play harness. Not part of the episode UI. */
+  private publishShot(): void {
+    if (!this.camera || !this.oneRig) return;
+    const project = (x: number, y: number, z: number) => {
+      this.head.set(x, y, z);
+      this.head.project(this.camera!);
+      return {
+        x: (this.head.x * 0.5 + 0.5) * this.viewW,
+        y: (-this.head.y * 0.5 + 0.5) * this.viewH,
+      };
+    };
+    const one = this.oneRig.position;
+    (window as Window & { __nb?: unknown }).__nb = {
+      phase: this.phase,
+      cam: {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z,
+        lx: this.look.x,
+        ly: this.look.y,
+        lz: this.look.z,
+        fov: this.camera.fov,
+      },
+      one: project(one.x, 0.55, one.z),
+      pad: project(PAD.x, 0.2, PAD.z),
+      flower: project(FIND_LAYOUT.flower.x, 0.55, FIND_LAYOUT.flower.z),
+      bee: project(FIND_LAYOUT.bee.x, FIND_LAYOUT.bee.y, FIND_LAYOUT.bee.z),
+      sun: project(FIND_LAYOUT.sun.x, FIND_LAYOUT.sun.y, FIND_LAYOUT.sun.z),
+    };
   }
 
   private updateCamera(dt: number): void {
     if (!this.camera) return;
     const framing = this.phase === 'title' || this.phase === 'boot' || this.phase === 'error' ? 'title' : 'stage';
     const fov = frameCamera(this.camera.aspect, this.viewW, framing, this.camTarget, this.lookTarget);
+    const frameScale = (window as Window & { __nbFrame?: number }).__nbFrame;
+    if (typeof frameScale === 'number' && frameScale > 1) {
+      const offset = this.camTarget.clone().sub(this.lookTarget);
+      this.camTarget.copy(this.lookTarget).addScaledVector(offset, frameScale);
+    }
     if (!this.cameraReady) {
       this.camera.position.copy(this.camTarget);
       this.look.copy(this.lookTarget);
@@ -472,11 +509,14 @@ export class Level01 {
     const pulse = 0.5 + 0.5 * Math.sin(time * 2.65);
     const amp =
       (this.phase === 'home' ? 1.2 : this.phase === 'clear' ? 0.7 : 0.32) + this.padBoost * 0.85;
-    if (actors.ringMat) actors.ringMat.emissiveIntensity = 0.3 + pulse * 0.85 * amp;
-    const glowMesh = actors.pad.getObjectByName('PadGlow');
-    if (glowMesh) glowMesh.scale.setScalar(1 + pulse * 0.035 * amp + this.padBoost * 0.04);
-    actors.glowMat.opacity = 0.55 + pulse * 0.4 * amp + this.padBoost * 0.2;
-    actors.glow.intensity = 0.7 + pulse * 1.1 * amp;
+    const wave = 0.86 + pulse * 0.28 * amp;
+    if (actors.ringMat) actors.ringMat.emissiveIntensity = 0.3 * wave;
+    for (const mat of actors.bandMats) {
+      const base = typeof mat.userData.baseEmissive === 'number' ? mat.userData.baseEmissive : 0.5;
+      mat.emissiveIntensity = base * wave;
+    }
+    actors.glowMat.opacity = 0;
+    actors.glow.intensity = 0.03 * wave;
 
     this.badgeHide = THREE.MathUtils.damp(this.badgeHide, this.wantBadge, 7, dt);
     if (actors.padDigit) {

@@ -20,7 +20,7 @@
 
 ## 已知限制
 
-花、蜜蜂、太阳、地面、小屋和树石草都用 `public/models/` 里的定稿 glb。远处的大草地和山丘仍是程序画的，不挡操作。小屋和装饰摆在拖动路线和三个点击区外面；很窄的手机竖屏上，最边上的树可能被裁掉一点。
+花、蜜蜂、太阳、小屋和树石草都用 `public/models/` 里的定稿 glb。舞台不再是圆盘盖在程序草地上：草甸用 `ground.glb` 的草地贴图铺出去，圆盘边缘和程序山丘已去掉。建模仍要重做起伏地形和道具精模，这一版不能合 main。小屋和装饰摆在拖动路线和三个点击区外面；很窄的手机竖屏上，最边上的树可能被裁掉一点。
 
 ## 本地运行
 
@@ -50,6 +50,7 @@ Vite `base` 为 `/number-blocks/`。
 - `public/previews/` — `one-v9.png`、`pad-v5.png`
 - `docs/ep01-one-design-v2.md` — 第一集加厚策划（当前玩法）
 - `docs/ep01-scene-art-brief.md` — 第一集场景与道具摆放
+- `docs/ep01-mood-gap-checklist.md` — 气氛板差距（引擎 A–F，建模 G 只留交叉项）
 - `docs/ep01-one-design.md` — 第一集薄版策划
 - `docs/style-guide-v0.1.md` — 造型规范
 
@@ -77,7 +78,7 @@ Mouse and touch both work. The button at the top right mutes the sounds.
 
 ## Known limits
 
-The flower, bee, sun, ground, hut, trees, rocks, and grass clumps are the final glb files in `public/models/`. The far meadow plane and hills are still procedural and sit outside the play disc. The hut and decoration stay off the drag path and the three tap zones; on a very narrow phone the outermost trees can clip the frame edge.
+The flower, bee, sun, hut, trees, rocks, and grass clumps are the glb files in `public/models/`. The stage is no longer a disc over a procedural plane: the meadow continues `ground.glb`'s grass albedo, and the platter rim and procedural hills are gone. Modeling still owns a real terrain remaster and the prop remasters, so this build is not ready to merge. The hut and decoration stay off the drag path and the three tap zones; on a very narrow phone the outermost trees can clip the frame edge.
 
 ## Run locally
 
@@ -105,4 +106,5 @@ GitHub Pages for this repo publishes the **root of `main`** (there is no `gh-pag
 - `public/previews/` — `one-v9.png` and `pad-v5.png`
 - `docs/ep01-one-design-v2.md` — thickened episode design (current play)
 - `docs/ep01-scene-art-brief.md` — episode-one scene and prop placement
+- `docs/ep01-mood-gap-checklist.md` — mood-board gap list (engine A–F; modeling stub G)
 - `docs/` — also the thin v1 design and the style guide

@@ -21,8 +21,117 @@ function shade(root: THREE.Object3D, cast: boolean): void {
     obj.castShadow = cast && !ghost;
     obj.receiveShadow = true;
     for (const mat of list) {
-      if (mat instanceof THREE.MeshStandardMaterial) mat.envMapIntensity = 0.2;
+      if (!(mat instanceof THREE.MeshStandardMaterial)) continue;
+      mat.envMapIntensity = 0.16;
+      const meadow =
+        mat.name === 'Grass' ||
+        mat.name === 'GrassEdge' ||
+        mat.name === 'PadSurround' ||
+        mat.name === 'PadGrassPlate' ||
+        mat.name === 'Mound';
+      const canopy = mat.name === 'Canopy' || mat.name === 'CanopyDark';
+      if (meadow) mat.color.multiply(new THREE.Color().setRGB(1.08, 1.04, 0.82));
+      else if (canopy) mat.color.multiply(new THREE.Color().setRGB(1.06, 1.0, 0.72));
+      if (!mat.transparent && mat.roughness < 0.45) mat.roughness = 0.5;
     }
+  });
+}
+
+const FIELD_SIZE = 180;
+const TILE_METERS = 2.8;
+
+function findStandard(root: THREE.Object3D, name: string): THREE.MeshStandardMaterial | null {
+  let found: THREE.MeshStandardMaterial | null = null;
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const list = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of list) {
+      if (mat instanceof THREE.MeshStandardMaterial && mat.name === name) found = mat;
+    }
+  });
+  return found;
+}
+
+/** The grass albedo is a round vignette. Tile its healthy center instead of the disc. */
+function grassTile(source: CanvasImageSource, width: number, height: number): THREE.CanvasTexture {
+  const crop = Math.floor(Math.min(width, height) * 0.4);
+  const ox = Math.floor((width - crop) / 2);
+  const oy = Math.floor((height - crop) / 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = crop;
+  canvas.height = crop;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法绘制草甸');
+  ctx.drawImage(source, ox, oy, crop, crop, 0, 0, crop, crop);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.MirroredRepeatWrapping;
+  tex.wrapT = THREE.MirroredRepeatWrapping;
+  tex.repeat.set(FIELD_SIZE / TILE_METERS, FIELD_SIZE / TILE_METERS);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/**
+ * ground.glb's GrassDisk is a 6.3m fan with a dark rim. Hide that platter and
+ * continue the same grass albedo to the horizon so the frame is a meadow.
+ */
+function buildMeadowField(grass: THREE.MeshStandardMaterial): THREE.Mesh {
+  const image = grass.map?.image as (CanvasImageSource & { width?: number; height?: number }) | undefined;
+  if (!grass.map || !image?.width || !image.height) throw new Error('草地贴图还没就绪');
+  const map = grassTile(image, image.width, image.height);
+  const geo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE, 80, 80);
+  const pos = geo.attributes.position;
+  if (!pos) throw new Error('草甸几何缺少顶点');
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const wx = x;
+    const wz = -y;
+    const r = Math.hypot(wx, wz);
+    const wave =
+      Math.sin(wx * 0.22 + 0.4) * 0.055 +
+      Math.cos(wz * 0.18) * 0.04 +
+      Math.sin((wx + wz) * 0.1) * 0.03;
+    const amp = THREE.MathUtils.smoothstep(r, 4.6, 12);
+    pos.setZ(i, wave * amp);
+    const sun = 0.88 + 0.16 * (0.5 + 0.5 * Math.sin(wx * 0.16 + 0.7));
+    const patch = 0.92 + 0.08 * Math.sin(wz * 0.21 + wx * 0.05);
+    const tone = sun * patch;
+    colors[i * 3] = tone;
+    colors[i * 3 + 1] = tone;
+    colors[i * 3 + 2] = tone * 0.96;
+  }
+  pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    map,
+    color: grass.color.clone(),
+    roughness: grass.roughness,
+    metalness: grass.metalness,
+    envMapIntensity: grass.envMapIntensity,
+    vertexColors: true,
+  });
+  mat.name = 'MeadowField';
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'MeadowField';
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function openGround(ground: THREE.Object3D): void {
+  const disk = ground.getObjectByName('GrassDisk');
+  if (disk) disk.visible = false;
+  ground.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const list = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const hide = list.some(
+      (mat) => mat.name === 'GrassEdge' || mat.name === 'PadSurround' || mat.name === 'PadGrassPlate',
+    );
+    if (hide) obj.visible = false;
   });
 }
 
@@ -56,7 +165,12 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
 
   const ground = claim(groundGltf, 'Ground');
   shade(ground, false);
+  openGround(ground);
   scene.add(ground);
+  const grass = findStandard(ground, 'Grass');
+  if (!grass) throw new Error('模型里没有草地材质');
+  const field = buildMeadowField(grass);
+  scene.add(field);
 
   const hut = claim(hutGltf, 'HomeHut');
   hut.position.set(HUT.x, HUT.y, HUT.z);
@@ -70,7 +184,7 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
   const trees = scatter(scene, treeSrc, TREES, true);
   const rocks = scatter(scene, rockSrc, ROCKS, true);
   const clumps = scatter(scene, grassSrc, GRASS, false);
-  const placed = [ground, hut, ...trees, ...rocks, ...clumps];
+  const placed = [field, ground, hut, ...trees, ...rocks, ...clumps];
 
   return {
     dispose() {
@@ -90,7 +204,12 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
       }
       for (const src of [treeSrc, rockSrc, grassSrc]) gather(src);
       for (const geometry of geometries) geometry.dispose();
-      for (const material of materials) material.dispose();
+      for (const material of materials) {
+        if (material instanceof THREE.MeshStandardMaterial && material.name === 'MeadowField') {
+          material.map?.dispose();
+        }
+        material.dispose();
+      }
     },
   };
 }
