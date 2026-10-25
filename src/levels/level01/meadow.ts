@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export type Meadow = {
-  update(time: number): void;
+  update(): void;
 };
 
 function mulberry32(seed: number): () => number {
@@ -92,38 +92,6 @@ function makeSky(): THREE.Mesh {
   return sky;
 }
 
-function makeFlower(color: number): THREE.Group {
-  const group = new THREE.Group();
-  const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.018, 0.026, 0.22, 7),
-    new THREE.MeshStandardMaterial({ color: 0x3f8f46, roughness: 0.8, metalness: 0, envMapIntensity: 0 }),
-  );
-  stem.position.y = 0.11;
-  stem.castShadow = true;
-  const head = new THREE.Group();
-  const petalMat = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.48,
-    metalness: 0.02,
-    envMapIntensity: 0.25,
-  });
-  for (let i = 0; i < 5; i += 1) {
-    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), petalMat);
-    const a = (i / 5) * Math.PI * 2;
-    petal.position.set(Math.cos(a) * 0.062, 0, Math.sin(a) * 0.062);
-    petal.scale.set(1, 0.5, 0.72);
-    head.add(petal);
-  }
-  const center = new THREE.Mesh(
-    new THREE.SphereGeometry(0.04, 10, 8),
-    new THREE.MeshStandardMaterial({ color: 0xffe08a, roughness: 0.4, metalness: 0.02, envMapIntensity: 0.3 }),
-  );
-  head.add(center);
-  head.position.y = 0.24;
-  group.add(stem, head);
-  return group;
-}
-
 export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Meadow {
   scene.background = new THREE.Color('#f4efe6');
   scene.fog = new THREE.Fog(0xf4efe6, 18, 36);
@@ -199,27 +167,9 @@ export function buildMeadow(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
     scene.add(mesh);
   }
 
-  const flowers = [
-    makeFlower(0xfff6ea),
-    makeFlower(0xffd0a8),
-  ];
-  const leftFlower = flowers[0];
-  const rightFlower = flowers[1];
-  if (leftFlower) {
-    leftFlower.position.set(-1.95, 0, 1.2);
-    leftFlower.rotation.y = 0.4;
-  }
-  if (rightFlower) {
-    rightFlower.position.set(2.15, 0, -1.15);
-    rightFlower.rotation.y = -0.6;
-  }
-  for (const flower of flowers) scene.add(flower);
-
   return {
-    update(time: number) {
-      flowers.forEach((flower, i) => {
-        flower.rotation.z = Math.sin(time * 1.35 + i * 1.7) * 0.045;
-      });
+    update() {
+      /* Hills and grass stay still. FIND props animate themselves. */
     },
   };
 }

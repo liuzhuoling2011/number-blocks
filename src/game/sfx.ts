@@ -34,6 +34,25 @@ export class Sfx {
     });
   }
 
+  /** `prop.tap` — a flower, bee, or sun was tapped. */
+  propTap(): void {
+    this.tone({ freq: 640, slide: 920, dur: 0.09, gain: 0.05, type: 'sine' });
+  }
+
+  /** `find.progress` — one more singular thing. `step` is 1, 2, or 3. */
+  findProgress(step: number): void {
+    const freq = 494 + Math.max(1, Math.min(3, step)) * 70;
+    this.tone({ freq, slide: freq * 1.22, dur: 0.13, gain: 0.048, type: 'triangle', delay: 0.06 });
+  }
+
+  /** `find.complete` — 3/3, just before the pad opens. */
+  findComplete(): void {
+    const notes = [659.25, 783.99, 987.77];
+    notes.forEach((freq, i) => {
+      this.tone({ freq, dur: 0.16, gain: 0.046, type: 'sine', delay: 0.14 + i * 0.07 });
+    });
+  }
+
   private tone(opts: {
     freq: number;
     dur: number;

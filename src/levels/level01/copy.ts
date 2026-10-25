@@ -1,4 +1,4 @@
-/** Episode One copy, from docs/ep01-one-design.md. */
+/** Episode One copy. Title card matches v1; later lines are docs/ep01-one-design-v2.md. */
 export const copy = {
   brand: '数字积木',
   episodeKicker: '第一集 ·',
@@ -6,9 +6,16 @@ export const copy = {
   episodeTitle: '第一集 · 一',
   episodeSub: '认识数字块「一」',
   start: '开始',
+  meet: '我是一！',
+  meetHint: '先去找找，哪里只有一个？',
+  findHint: '点一点：哪里只有「一个」？',
+  findFlower: '一朵花',
+  findBee: '一只蜜蜂',
+  findSun: '一个太阳',
+  findDone: '都是一个！',
   hint: '把「一」拖到光圈上',
   miss: '再拖到发光的圈圈里',
-  cheer: '我是一！',
+  cheer: '一个奇妙的世界，还有一个我！',
   clearTitle: '太棒了！',
   clearBody: '你认识「一」啦',
   replay: '再玩一次',
@@ -20,5 +27,6 @@ export const copy = {
   errorTitle: '积木暂时没出现',
   errorBody: '再试一次吧',
   retry: '再试一次',
-  canvasLabel: '第一集。把红色的「一」拖到发光的圈圈上。',
+  canvasLabel: '第一集。先找出只有一个的花、蜜蜂和太阳，再把红色的「一」拖到发光的圈圈上。',
+  progressName: '找到只有一个的东西',
 } as const;

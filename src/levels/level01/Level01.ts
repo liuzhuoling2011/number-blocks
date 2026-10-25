@@ -8,13 +8,26 @@ import { frameCamera } from './frame.ts';
 import { HOME, PAD, PAD_RADIUS } from './layout.ts';
 import { buildMeadow } from './meadow.ts';
 import type { Meadow } from './meadow.ts';
+import { buildFindProps } from './props.ts';
+import type { FindProps, PropId } from './props.ts';
 
-type Phase = 'boot' | 'title' | 'play' | 'clear' | 'error';
+/** TITLE → MEET → FIND → HOME → CLEAR. HOME is the old drag-to-pad play. */
+type Phase = 'boot' | 'title' | 'meet' | 'find' | 'home' | 'clear' | 'error';
 type Motion = 'idle' | 'drag' | 'return' | 'snap' | 'celebrate';
 
 const SNAP_TIME = 0.42;
 const RETURN_TIME = 0.46;
 const PAD_R2 = PAD_RADIUS * PAD_RADIUS;
+const MEET_DWELL = 2.6;
+const FIND_TOTAL = 3;
+const FIND_DONE_AT = 1.15;
+const HOME_OPEN_AT = 2.2;
+
+const FIND_TOAST: Record<PropId, string> = {
+  flower: copy.findFlower,
+  bee: copy.findBee,
+  sun: copy.findSun,
+};
 
 export class Level01 {
   private readonly root: HTMLElement;
@@ -35,6 +48,9 @@ export class Level01 {
   private hint!: HTMLElement;
   private toast!: HTMLElement;
   private bubble!: HTMLElement;
+  private progress!: HTMLElement;
+  private progressCount!: HTMLElement;
+  private progressDots: HTMLElement[] = [];
   private titleSheet!: HTMLElement;
   private clearSheet!: HTMLElement;
   private bootEl!: HTMLElement;
@@ -51,6 +67,7 @@ export class Level01 {
   private oneModel: THREE.Group | null = null;
   private guide: THREE.Group | null = null;
   private guideMat: THREE.MeshBasicMaterial | null = null;
+  private findProps: FindProps | null = null;
 
   private phase: Phase = 'boot';
   private motion: Motion = 'idle';
@@ -83,6 +100,11 @@ export class Level01 {
   private prevX = HOME.x;
   private didChord = false;
   private cardShown = false;
+  private meetTime = 0;
+  private foundCount = 0;
+  private pendingHome = false;
+  private homeDelay = 0;
+  private saidDone = false;
   private bits: { mesh: THREE.Mesh; v: THREE.Vector3; spin: THREE.Vector3; life: number }[] = [];
   private boxGeo: THREE.BoxGeometry | null = null;
   private dotGeo: THREE.SphereGeometry | null = null;
@@ -118,6 +140,7 @@ export class Level01 {
     window.clearTimeout(this.toastTimer);
     cancelAnimationFrame(this.raf);
     this.clearConfetti();
+    this.findProps?.dispose();
     this.boxGeo?.dispose();
     this.dotGeo?.dispose();
     this.renderer?.dispose();
@@ -140,9 +163,13 @@ export class Level01 {
             </svg>
           </button>
         </header>
-        <p class="nb-hint">${copy.hint}</p>
-        <p class="nb-toast" hidden>${copy.miss}</p>
-        <p class="nb-bubble" hidden>${copy.cheer}</p>
+        <p class="nb-hint"></p>
+        <p class="nb-toast" hidden></p>
+        <p class="nb-bubble" hidden></p>
+        <p class="nb-progress" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0" aria-label="${copy.progressName}">
+          <span class="nb-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="nb-count">0/3</span>
+        </p>
         <div class="nb-sheet-wrap" data-sheet="title" hidden>
           <section class="nb-sheet">
             <h1 class="nb-title">
@@ -181,13 +208,15 @@ export class Level01 {
     const hint = this.root.querySelector<HTMLElement>('.nb-hint');
     const toast = this.root.querySelector<HTMLElement>('.nb-toast');
     const bubble = this.root.querySelector<HTMLElement>('.nb-bubble');
+    const progress = this.root.querySelector<HTMLElement>('.nb-progress');
+    const progressCount = this.root.querySelector<HTMLElement>('.nb-count');
     const titleSheet = this.root.querySelector<HTMLElement>('[data-sheet="title"]');
     const clearSheet = this.root.querySelector<HTMLElement>('[data-sheet="clear"]');
     const bootEl = this.root.querySelector<HTMLElement>('.nb-boot');
     const errorEl = this.root.querySelector<HTMLElement>('.nb-error');
     const live = this.root.querySelector<HTMLElement>('.nb-sr');
     const muteBtn = this.root.querySelector<HTMLButtonElement>('.nb-mute');
-    if (!world || !canvas || !hint || !toast || !bubble || !titleSheet || !clearSheet || !bootEl || !errorEl || !live || !muteBtn) {
+    if (!world || !canvas || !hint || !toast || !bubble || !progress || !progressCount || !titleSheet || !clearSheet || !bootEl || !errorEl || !live || !muteBtn) {
       throw new Error('界面没有挂上');
     }
     this.world = world;
@@ -195,6 +224,9 @@ export class Level01 {
     this.hint = hint;
     this.toast = toast;
     this.bubble = bubble;
+    this.progress = progress;
+    this.progressCount = progressCount;
+    this.progressDots = [...progress.querySelectorAll<HTMLElement>('.nb-dots i')];
     this.titleSheet = titleSheet;
     this.clearSheet = clearSheet;
     this.bootEl = bootEl;
@@ -259,6 +291,7 @@ export class Level01 {
     this.guide = guide;
     this.guideMat = guideMat;
     this.scene.add(guide);
+    this.findProps = buildFindProps(this.scene, this.reduceMotion);
     this.onResize();
     const fov = frameCamera(this.camera.aspect, this.viewW, 'title', this.camTarget, this.lookTarget);
     this.camera.position.copy(this.camTarget);
@@ -291,7 +324,9 @@ export class Level01 {
   private update(dt: number, clockDt: number, time: number): void {
     if (!this.camera || !this.oneRig || !this.oneModel) return;
     this.updateCamera(dt);
-    this.meadow?.update(time);
+    this.meadow?.update();
+    this.findProps?.update(time, dt);
+    this.tickPhases(clockDt);
     this.updateMotion(dt, clockDt, time);
     this.updateShadow();
     this.updatePad(dt, time);
@@ -302,8 +337,8 @@ export class Level01 {
 
   private updateCamera(dt: number): void {
     if (!this.camera) return;
-    const phase = this.phase === 'play' || this.phase === 'clear' ? 'play' : 'title';
-    const fov = frameCamera(this.camera.aspect, this.viewW, phase, this.camTarget, this.lookTarget);
+    const framing = this.phase === 'title' || this.phase === 'boot' || this.phase === 'error' ? 'title' : 'stage';
+    const fov = frameCamera(this.camera.aspect, this.viewW, framing, this.camTarget, this.lookTarget);
     if (!this.cameraReady) {
       this.camera.position.copy(this.camTarget);
       this.look.copy(this.lookTarget);
@@ -424,8 +459,8 @@ export class Level01 {
     const actors = this.actors;
     if (!actors) return;
     const pulse = 0.5 + 0.5 * Math.sin(time * 2.65);
-    const playing = this.phase === 'play' || this.phase === 'clear';
-    const amp = (playing ? 1 : 0.45) + this.padBoost * 0.85;
+    const amp =
+      (this.phase === 'home' ? 1.2 : this.phase === 'clear' ? 0.7 : 0.32) + this.padBoost * 0.85;
     if (actors.ringMat) actors.ringMat.emissiveIntensity = 0.3 + pulse * 0.85 * amp;
     const glowMesh = actors.pad.getObjectByName('PadGlow');
     if (glowMesh) glowMesh.scale.setScalar(1 + pulse * 0.035 * amp + this.padBoost * 0.04);
@@ -445,7 +480,7 @@ export class Level01 {
 
   private updateGuide(time: number): void {
     if (!this.guide || !this.guideMat) return;
-    const show = this.ready && this.phase === 'play' && this.motion === 'idle' && !this.reduceMotion;
+    const show = this.ready && this.phase === 'home' && this.motion === 'idle' && !this.reduceMotion;
     this.guide.visible = show;
     if (!show) return;
     const loop = (time * 0.42) % 1;
@@ -456,6 +491,21 @@ export class Level01 {
       0.32,
     );
     this.guideMat.opacity = 0.2 + Math.sin(loop * Math.PI) * 0.75;
+  }
+
+  private tickPhases(clockDt: number): void {
+    if (this.phase === 'meet' && this.motion === 'idle') {
+      this.meetTime += clockDt;
+      if (this.meetTime >= MEET_DWELL) this.enterFind();
+    }
+    if (this.phase === 'find' && this.pendingHome) {
+      this.homeDelay += clockDt;
+      if (!this.saidDone && this.homeDelay >= FIND_DONE_AT) {
+        this.saidDone = true;
+        this.showToast(copy.findDone, 'find');
+      }
+      if (this.homeDelay >= HOME_OPEN_AT) this.openHome();
+    }
   }
 
   private updateBubble(): void {
@@ -505,9 +555,30 @@ export class Level01 {
   };
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (!this.ready || this.phase !== 'play' || !this.oneRig) return;
+    if (!this.ready || !this.oneRig || event.button > 0) return;
+    if (this.phase === 'meet') {
+      if (event.cancelable) event.preventDefault();
+      this.ndcFrom(event);
+      this.sfx.unlock();
+      if (this.hitsOne()) this.enterFind();
+      else this.pulseHint();
+      return;
+    }
+    if (this.phase === 'find') {
+      if (event.cancelable) event.preventDefault();
+      this.ndcFrom(event);
+      const id = this.hitsProp(event);
+      this.sfx.unlock();
+      if (!id) {
+        this.pulseHint();
+        return;
+      }
+      this.collectProp(id);
+      return;
+    }
+    if (this.phase !== 'home') return;
     if (this.motion === 'return' || this.motion === 'snap' || this.motion === 'celebrate') return;
-    if (this.pointerId !== null || event.button > 0) return;
+    if (this.pointerId !== null) return;
     if (event.cancelable) event.preventDefault();
     this.ndcFrom(event);
     if (!this.hitsOne()) {
@@ -526,9 +597,15 @@ export class Level01 {
   private onPointerMove = (event: PointerEvent): void => {
     if (!this.ready || !this.camera) return;
     if (this.pointerId === null) {
-      if (this.phase === 'play' && this.motion === 'idle') {
-        this.ndcFrom(event);
+      this.ndcFrom(event);
+      if (this.phase === 'home' && this.motion === 'idle') {
         this.canvas.style.cursor = this.hitsOne() ? 'grab' : 'default';
+      } else if (this.phase === 'find') {
+        this.canvas.style.cursor = this.hitsProp(event) ? 'pointer' : 'default';
+      } else if (this.phase === 'meet') {
+        this.canvas.style.cursor = this.hitsOne() ? 'pointer' : 'default';
+      } else {
+        this.canvas.style.cursor = 'default';
       }
       return;
     }
@@ -584,7 +661,7 @@ export class Level01 {
   }
 
   private startSnap(): void {
-    if (!this.oneRig || !this.oneModel) return;
+    if (!this.oneRig || !this.oneModel || this.phase !== 'home' || this.foundCount < FIND_TOTAL) return;
     this.motion = 'snap';
     this.motionT = 0;
     this.fromX = this.oneRig.position.x;
@@ -603,11 +680,15 @@ export class Level01 {
     this.returnQuiet = !showMiss;
     if (showMiss) {
       this.sfx.placeFail();
-      this.showToast();
+      this.showToast(copy.miss, 'miss');
     }
   }
 
   private landSuccess(): void {
+    if (this.phase !== 'home' || this.foundCount < FIND_TOTAL) {
+      this.motion = 'idle';
+      return;
+    }
     this.motion = 'celebrate';
     this.motionT = 0;
     this.didChord = false;
@@ -615,6 +696,7 @@ export class Level01 {
     this.wantBadge = 1;
     this.sfx.placeSuccess();
     this.spawnConfetti();
+    this.bubble.textContent = copy.cheer;
     this.bubble.hidden = false;
     this.live.textContent = copy.cheer;
     this.setPhase('clear');
@@ -675,7 +757,7 @@ export class Level01 {
     if (this.phase !== 'title') return;
     this.sfx.unlock();
     this.sfx.click();
-    this.setPhase('play');
+    this.setPhase('meet');
   };
 
   private onReplay = (): void => {
@@ -685,12 +767,64 @@ export class Level01 {
     this.wantBadge = 0;
     this.cardShown = false;
     this.didChord = false;
-    this.bubble.hidden = true;
     this.toast.hidden = true;
     this.clearConfetti();
-    this.setPhase('play');
+    this.foundCount = 0;
+    this.pendingHome = false;
+    this.homeDelay = 0;
+    this.saidDone = false;
+    this.meetTime = 0;
+    this.pointerId = null;
+    this.liftArmed = false;
+    this.findProps?.reset();
+    this.renderProgress();
+    this.setPhase('meet');
     this.startReturn(false);
   };
+
+  private enterFind(): void {
+    if (this.phase !== 'meet') return;
+    this.setPhase('find');
+  }
+
+  private collectProp(id: PropId): void {
+    if (!this.findProps || this.phase !== 'find' || this.pendingHome) return;
+    if (this.findProps.found(id)) {
+      this.findProps.punch(id);
+      this.sfx.propTap();
+      this.showToast(FIND_TOAST[id], 'find');
+      return;
+    }
+    this.findProps.markFound(id);
+    this.foundCount += 1;
+    this.sfx.propTap();
+    this.sfx.findProgress(this.foundCount);
+    this.showToast(FIND_TOAST[id], 'find');
+    this.renderProgress();
+    this.live.textContent = `${FIND_TOAST[id]}。${this.foundCount}/${FIND_TOTAL}`;
+    if (this.foundCount >= FIND_TOTAL) {
+      this.pendingHome = true;
+      this.homeDelay = 0;
+      this.saidDone = false;
+      this.sfx.findComplete();
+    }
+  }
+
+  private openHome(): void {
+    if (this.phase !== 'find' || this.foundCount < FIND_TOTAL) return;
+    this.pendingHome = false;
+    this.setPhase('home');
+  }
+
+  private renderProgress(): void {
+    const found = this.foundCount;
+    this.progressCount.textContent = `${found}/${FIND_TOTAL}`;
+    this.progress.setAttribute('aria-valuenow', String(found));
+    this.progress.setAttribute('aria-label', `${copy.progressName} ${found}/${FIND_TOTAL}`);
+    this.progressDots.forEach((dot, index) => {
+      dot.classList.toggle('is-on', index < found);
+    });
+  }
 
   private onMute = (): void => {
     this.sfx.unlock();
@@ -727,22 +861,43 @@ export class Level01 {
     this.clearSheet.hidden = !(phase === 'clear' && this.cardShown);
     this.bootEl.hidden = phase !== 'boot';
     this.errorEl.hidden = phase !== 'error';
-    if (phase === 'title') this.live.textContent = `${copy.episodeTitle}。${copy.episodeSub}`;
-    if (phase === 'play') this.live.textContent = copy.hint;
-    if (phase !== 'play') this.toast.hidden = true;
+    if (phase === 'title') {
+      this.bubble.hidden = true;
+      this.live.textContent = `${copy.episodeTitle}。${copy.episodeSub}`;
+    } else if (phase === 'meet') {
+      this.meetTime = 0;
+      this.hint.textContent = copy.meetHint;
+      this.bubble.textContent = copy.meet;
+      this.bubble.hidden = false;
+      this.live.textContent = `${copy.meet} ${copy.meetHint}`;
+    } else if (phase === 'find') {
+      this.bubble.hidden = true;
+      this.hint.textContent = copy.findHint;
+      this.live.textContent = copy.findHint;
+      this.renderProgress();
+    } else if (phase === 'home') {
+      this.bubble.hidden = true;
+      this.hint.textContent = copy.hint;
+      this.live.textContent = copy.hint;
+    } else if (phase === 'clear') {
+      this.bubble.textContent = copy.cheer;
+      this.bubble.hidden = false;
+    }
+    if (phase !== 'find' && phase !== 'home') this.toast.hidden = true;
   }
 
-  private showToast(): void {
-    if (this.returnQuiet) return;
+  private showToast(message: string, kind: 'miss' | 'find'): void {
+    if (kind === 'miss' && this.returnQuiet) return;
+    this.toast.textContent = message;
     this.toast.hidden = false;
-    this.toast.classList.remove('is-shake');
+    this.toast.classList.remove('is-shake', 'is-pop');
     void this.toast.offsetWidth;
-    this.toast.classList.add('is-shake');
+    this.toast.classList.add(kind === 'miss' ? 'is-shake' : 'is-pop');
     window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => {
       this.toast.hidden = true;
-    }, 2300);
-    this.live.textContent = copy.miss;
+    }, kind === 'miss' ? 2300 : 1800);
+    this.live.textContent = message;
   }
 
   private pulseHint(): void {
@@ -763,6 +918,20 @@ export class Level01 {
     if (this.raycaster.intersectObjects(this.actors.pick, false).length > 0) return true;
     this.head.set(this.oneRig.position.x, HOME.y + 0.52, this.oneRig.position.z);
     return this.raycaster.ray.distanceToPoint(this.head) < 0.84;
+  }
+
+  private hitsProp(event: PointerEvent): PropId | null {
+    if (!this.camera || !this.findProps) return null;
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const rect = this.canvas.getBoundingClientRect();
+    return this.findProps.hitTest(
+      this.raycaster,
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      this.camera,
+      rect.width,
+      rect.height,
+    );
   }
 
   private ndcFrom(event: PointerEvent): void {
