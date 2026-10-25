@@ -30,7 +30,7 @@ function shade(root: THREE.Object3D, cast: boolean): void {
         mat.name === 'PadGrassPlate' ||
         mat.name === 'Mound';
       const canopy = mat.name === 'Canopy' || mat.name === 'CanopyDark';
-      if (meadow) mat.color.multiply(new THREE.Color().setRGB(1.72, 1.24, 1.42));
+      if (meadow) mat.color.multiply(new THREE.Color().setRGB(1.62, 1.34, 1.08));
       else if (canopy) mat.color.multiply(new THREE.Color().setRGB(1.08, 1.02, 0.7));
       if (!mat.transparent && mat.roughness < 0.45) mat.roughness = 0.5;
     }
@@ -39,6 +39,30 @@ function shade(root: THREE.Object3D, cast: boolean): void {
 
 const FIELD_SIZE = 180;
 const TILE_METERS = 2.8;
+
+/**
+ * Soft knoll plus broad rolls. The drag corridor stays level (the drop ray
+ * is the y=0 plane). There is no circular lip: the slope eases in.
+ */
+export function meadowHeight(x: number, z: number): number {
+  const r = Math.hypot(x, z);
+  const crown = Math.exp(-(r * r) / (2 * 10.5 * 10.5));
+  const dome = (crown - 1) * 2.4;
+  const ax = Math.abs(x - 0.02);
+  const az = Math.abs(z);
+  const flatX = 1 - THREE.MathUtils.smoothstep(ax, 1.45, 3.1);
+  const flatZ = 1 - THREE.MathUtils.smoothstep(az, 1.75, 3.1);
+  const play = flatX * flatZ;
+  const roll =
+    Math.sin(x * 0.23 + 0.4) * Math.cos(z * 0.19 + 0.2) * 1.35 +
+    Math.sin(x * 0.11 - z * 0.14 + 1.1) * 1.05 +
+    Math.cos(x * 0.07 + z * 0.08) * 0.7;
+  // The camera sits on +Z. That lane stays low so a hill does not bury the stage.
+  const along = THREE.MathUtils.smoothstep(z, 1.5, 4.2);
+  const side = THREE.MathUtils.smoothstep(Math.abs(x), 1.7, 3.4);
+  const lane = z > 1.1 ? Math.max(side, 1 - along) : 1;
+  return (dome + roll) * (1 - play) * lane;
+}
 
 function findStandard(root: THREE.Object3D, name: string): THREE.MeshStandardMaterial | null {
   let found: THREE.MeshStandardMaterial | null = null;
@@ -80,7 +104,7 @@ function buildMeadowField(grass: THREE.MeshStandardMaterial): THREE.Mesh {
   const image = grass.map?.image as (CanvasImageSource & { width?: number; height?: number }) | undefined;
   if (!grass.map || !image?.width || !image.height) throw new Error('草地贴图还没就绪');
   const map = grassTile(image, image.width, image.height);
-  const geo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE, 80, 80);
+  const geo = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE, 120, 120);
   const pos = geo.attributes.position;
   if (!pos) throw new Error('草甸几何缺少顶点');
   const colors = new Float32Array(pos.count * 3);
@@ -89,19 +113,13 @@ function buildMeadowField(grass: THREE.MeshStandardMaterial): THREE.Mesh {
     const y = pos.getY(i);
     const wx = x;
     const wz = -y;
-    const r = Math.hypot(wx, wz);
-    const wave =
-      Math.sin(wx * 0.22 + 0.4) * 0.055 +
-      Math.cos(wz * 0.18) * 0.04 +
-      Math.sin((wx + wz) * 0.1) * 0.03;
-    const amp = THREE.MathUtils.smoothstep(r, 4.6, 12);
-    pos.setZ(i, wave * amp);
-    const sun = 1.06 + 0.08 * Math.sin(wx * 0.16 + 0.7);
-    const patch = 1.0 + 0.05 * Math.sin(wz * 0.21 + wx * 0.05);
+    pos.setZ(i, meadowHeight(wx, wz));
+    const sun = 1.04 + 0.07 * Math.sin(wx * 0.16 + 0.7);
+    const patch = 1.0 + 0.06 * Math.sin(wz * 0.21 + wx * 0.05);
     const tone = sun * patch;
     colors[i * 3] = tone;
-    colors[i * 3 + 1] = tone;
-    colors[i * 3 + 2] = tone;
+    colors[i * 3 + 1] = tone * 1.02;
+    colors[i * 3 + 2] = tone * 0.9;
   }
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -115,6 +133,28 @@ function buildMeadowField(grass: THREE.MeshStandardMaterial): THREE.Mesh {
     vertexColors: true,
   });
   mat.name = 'MeadowField';
+  // World-space haze, not camera fog, so a far phone camera does not wash FIND.
+  const hazeColor = new THREE.Color('#f3e0c4');
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uHazeColor = { value: hazeColor };
+    shader.uniforms.uHazeNear = { value: 8 };
+    shader.uniforms.uHazeFar = { value: 34 };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vMeadowWorld;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvMeadowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vMeadowWorld;\nuniform vec3 uHazeColor;\nuniform float uHazeNear;\nuniform float uHazeFar;',
+      )
+      .replace(
+        '#include <tonemapping_fragment>',
+        '#include <tonemapping_fragment>\nfloat meadowHaze = smoothstep(uHazeNear, uHazeFar, length(vMeadowWorld.xz));\ngl_FragColor.rgb = mix(gl_FragColor.rgb, uHazeColor, meadowHaze);',
+      );
+  };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'MeadowField';
   mesh.rotation.x = -Math.PI / 2;
@@ -148,7 +188,7 @@ function scatter(
   const placed: THREE.Object3D[] = [];
   for (const spot of spots) {
     const copy = source.clone(true);
-    copy.position.set(spot.x, spot.y, spot.z);
+    copy.position.set(spot.x, spot.y + meadowHeight(spot.x, spot.z), spot.z);
     copy.rotation.y = spot.rotY;
     copy.scale.setScalar(spot.scale);
     shade(copy, cast);
@@ -177,7 +217,7 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
   scene.add(field);
 
   const hut = claim(hutGltf, 'HomeHut');
-  hut.position.set(HUT.x, HUT.y, HUT.z);
+  hut.position.set(HUT.x, HUT.y + meadowHeight(HUT.x, HUT.z), HUT.z);
   hut.rotation.y = HUT.rotY;
   hut.scale.setScalar(HUT.scale);
   shade(hut, true);
@@ -193,7 +233,7 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
     }),
   );
   hutBlob.rotation.x = -Math.PI / 2;
-  hutBlob.position.set(HUT.x, 0.02, HUT.z + 0.15);
+  hutBlob.position.set(HUT.x, meadowHeight(HUT.x, HUT.z) + 0.02, HUT.z + 0.15);
   hutBlob.scale.set(HUT.scale, HUT.scale, 1);
   scene.add(hutBlob);
 

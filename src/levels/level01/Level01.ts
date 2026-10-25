@@ -515,7 +515,7 @@ export class Level01 {
       const base = typeof mat.userData.baseEmissive === 'number' ? mat.userData.baseEmissive : 0.5;
       mat.emissiveIntensity = base * wave;
     }
-    actors.glowMat.opacity = 0.62 + pulse * 0.1 * amp;
+    actors.glowMat.opacity = 0.9 + pulse * 0.08 * amp;
     actors.glow.intensity = 0.07 * wave;
 
     this.badgeHide = THREE.MathUtils.damp(this.badgeHide, this.wantBadge, 7, dt);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FIND_LAYOUT } from './layout.ts';
+import { meadowHeight } from './scenery.ts';
 import { loadModel } from './gltf.ts';
 
 export type PropId = 'flower' | 'bee' | 'sun';
@@ -175,7 +176,8 @@ export async function loadFindProps(scene: THREE.Scene, reduceMotion: boolean): 
     shade(model);
     const root = new THREE.Group();
     root.name = id;
-    root.position.set(spot.x, spot.y, spot.z);
+    const groundY = id === 'flower' ? meadowHeight(spot.x, spot.z) : 0;
+    root.position.set(spot.x, spot.y + groundY, spot.z);
     root.scale.setScalar(spot.scale);
     const visual = new THREE.Group();
     visual.add(model);
@@ -310,7 +312,8 @@ export async function loadFindProps(scene: THREE.Scene, reduceMotion: boolean): 
         rig.badge.visible = false;
         rig.visual.scale.set(1, 1, 1);
         const spot = FIND_LAYOUT[rig.id];
-        rig.root.position.set(spot.x, spot.y, spot.z);
+        const groundY = rig.id === 'flower' ? meadowHeight(spot.x, spot.z) : 0;
+        rig.root.position.set(spot.x, spot.y + groundY, spot.z);
         rig.root.rotation.z = 0;
       }
     },

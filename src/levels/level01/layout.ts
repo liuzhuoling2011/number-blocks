@@ -9,21 +9,21 @@ export const PAD_RADIUS = 0.9;
  * Flower sits in the foreground, the bee in the mid sky, the sun farther back.
  */
 export const FIND_LAYOUT = {
-  flower: { x: 0.08, y: 0, z: 1.42, scale: 1.48 },
-  bee: { x: 0.78, y: 1.95, z: -0.42, scale: 1.12 },
-  sun: { x: 2.15, y: 2.42, z: -1.28, scale: 0.44 },
+  flower: { x: 0.15, y: 0, z: 1.58, scale: 1.55 },
+  bee: { x: 0.62, y: 1.78, z: -0.48, scale: 1.18 },
+  sun: { x: 1.92, y: 2.22, z: -1.32, scale: 0.58 },
 } as const;
 
-/** Dome hut. Left of One, large enough that the doorway reads as a silhouette. */
-export const HUT = { x: -2.2, y: 0, z: -1.45, rotY: 0.45, scale: 1.58 };
+/** Dome hut, left and just behind One, doorway toward the camera. */
+export const HUT = { x: -1.68, y: 0, z: -1.12, rotY: 0.15, scale: 1.72 };
 
 type Decor = { x: number; y: number; z: number; rotY: number; scale: number };
 
 /** Trees sit on the rim so they don't cover the pad or the FIND props. */
 export const TREES: Decor[] = [
-  { x: -2.35, y: 0, z: -1.55, rotY: 0.5, scale: 1.08 },
-  { x: -0.15, y: 0, z: -2.15, rotY: 1.1, scale: 0.92 },
-  { x: 2.15, y: 0, z: -1.85, rotY: -0.4, scale: 1.02 },
+  { x: -3.35, y: 0, z: -1.55, rotY: 0.4, scale: 1.42 },
+  { x: 3.25, y: 0, z: -1.25, rotY: -0.5, scale: 1.32 },
+  { x: 0.35, y: 0, z: -3.6, rotY: 1.1, scale: 1.05 },
 ];
 
 export const ROCKS: Decor[] = [
@@ -36,16 +36,18 @@ export const ROCKS: Decor[] = [
 ];
 
 export const GRASS: Decor[] = [
-  { x: -1.78, y: 0, z: 0.62, rotY: 0.4, scale: 1.15 },
-  { x: -2.08, y: 0, z: 1.18, rotY: 1.2, scale: 1 },
-  { x: -1.32, y: 0, z: 1.38, rotY: 0.6, scale: 0.9 },
-  { x: -2.12, y: 0, z: -0.48, rotY: 2.0, scale: 1.05 },
-  { x: -1.95, y: 0, z: -1.42, rotY: 0.8, scale: 1.1 },
-  { x: 1.72, y: 0, z: 1.18, rotY: 0.5, scale: 1.05 },
-  { x: 2.18, y: 0, z: 0.42, rotY: 1.4, scale: 0.85 },
-  { x: 1.58, y: 0, z: -1.38, rotY: 0.3, scale: 0.95 },
-  { x: 1.22, y: 0, z: 1.22, rotY: 0.2, scale: 0.82 },
-  { x: -1.18, y: 0, z: 1.48, rotY: 1.1, scale: 0.92 },
-  { x: 0.2, y: 0, z: -1.88, rotY: 0.7, scale: 1 },
-  { x: -0.88, y: 0, z: -1.62, rotY: 2.2, scale: 0.85 },
+  { x: -1.85, y: 0, z: 0.85, rotY: 0.4, scale: 1.7 },
+  { x: -2.35, y: 0, z: 1.45, rotY: 1.2, scale: 1.45 },
+  { x: -1.45, y: 0, z: 1.72, rotY: 0.6, scale: 1.35 },
+  { x: -2.4, y: 0, z: -0.35, rotY: 2.0, scale: 1.55 },
+  { x: -2.15, y: 0, z: -1.85, rotY: 0.8, scale: 1.6 },
+  { x: 1.85, y: 0, z: 1.45, rotY: 0.5, scale: 1.5 },
+  { x: 2.45, y: 0, z: 0.55, rotY: 1.4, scale: 1.35 },
+  { x: 1.7, y: 0, z: -1.7, rotY: 0.3, scale: 1.4 },
+  { x: 1.35, y: 0, z: 1.85, rotY: 0.2, scale: 1.25 },
+  { x: -0.95, y: 0, z: 2.05, rotY: 1.1, scale: 1.45 },
+  { x: 0.85, y: 0, z: 2.15, rotY: 0.7, scale: 1.3 },
+  { x: -0.55, y: 0, z: -2.35, rotY: 2.2, scale: 1.35 },
+  { x: 2.7, y: 0, z: -2.1, rotY: 0.9, scale: 1.2 },
+  { x: -2.85, y: 0, z: 0.15, rotY: 1.6, scale: 1.25 },
 ];

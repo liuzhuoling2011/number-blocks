@@ -45,14 +45,14 @@ function tuneStandard(mat: THREE.MeshStandardMaterial, intensity: number): void 
   // reads as the mood-board crimson instead of orange glass.
   if (mat.name === 'BodyPlastic') {
     mat.color.setRGB(1.08, 0.24, 0.26);
-    mat.roughness = 0.4;
-    mat.metalness = 0.04;
+    mat.roughness = 0.48;
+    mat.metalness = 0.02;
     mat.transparent = false;
     mat.opacity = 1;
     mat.depthWrite = true;
   } else if (mat.name === 'FootPlastic') {
     mat.color.setRGB(1.02, 0.42, 0.4);
-    mat.roughness = 0.42;
+    mat.roughness = 0.5;
     mat.metalness = 0.04;
     mat.transparent = false;
     mat.opacity = 1;
@@ -135,16 +135,7 @@ function preparePad(pad: THREE.Object3D): {
     obj.receiveShadow = false;
     if (obj.name === 'Ring') {
       ringMat = mat;
-      mat.color.set('#d4533a');
-      mat.emissive.set('#c43a28');
-      mat.emissiveIntensity = 0.12;
-      mat.roughness = 0.55;
-      mat.metalness = 0.02;
-      mat.opacity = 1;
-      mat.transparent = false;
-      mat.depthWrite = true;
-      mat.side = THREE.DoubleSide;
-      obj.renderOrder = 3;
+      obj.visible = false;
     }
     if (obj.name === 'Plate') obj.visible = false;
     if (obj.name === 'DigitOneMesh') {
@@ -161,7 +152,7 @@ function preparePad(pad: THREE.Object3D): {
   return { ringMat, padDigit, padDigitBaseY: padDigit?.position.y ?? 0.1 };
 }
 
-function embeddedGlowTexture(): THREE.CanvasTexture {
+function padRingTexture(): THREE.CanvasTexture {
   const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -170,17 +161,24 @@ function embeddedGlowTexture(): THREE.CanvasTexture {
   if (!ctx) throw new Error('无法绘制光圈');
   const img = ctx.createImageData(size, size);
   const data = img.data;
+  const rings = [
+    { r: 0.46, w: 0.055, a: 0.72 },
+    { r: 0.62, w: 0.05, a: 0.9 },
+    { r: 0.78, w: 0.048, a: 0.62 },
+  ];
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const u = (x + 0.5) / size - 0.5;
-      const v = (y + 0.5) / size - 0.5;
-      const d = Math.hypot(u, v) * 2;
-      const halo = Math.exp(-(((d - 0.58) / 0.18) ** 2));
-      const wash = d < 0.72 ? Math.exp(-(((d - 0.36) / 0.34) ** 2)) : 0;
-      const alpha = Math.min(1, halo * 0.42 + wash * 0.16);
+      const d = Math.hypot((x + 0.5) / size - 0.5, (y + 0.5) / size - 0.5) * 2;
+      let alpha = 0;
+      for (const ring of rings) {
+        const t = (d - ring.r) / ring.w;
+        alpha += ring.a * Math.exp(-t * t * 1.6);
+      }
+      if (d > 0.4 && d < 0.86) alpha += 0.08 * (1 - Math.abs(d - 0.62) / 0.28);
+      alpha = Math.min(1, alpha);
       const i = (y * size + x) * 4;
-      data[i] = 214;
-      data[i + 1] = 54;
+      data[i] = 232;
+      data[i + 1] = 58;
       data[i + 2] = 40;
       data[i + 3] = Math.round(alpha * 255);
     }
@@ -197,20 +195,28 @@ function addPadGlow(pad: THREE.Object3D): {
   bandMats: THREE.MeshStandardMaterial[];
 } {
   const glowMat = new THREE.MeshBasicMaterial({
-    map: embeddedGlowTexture(),
+    map: padRingTexture(),
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.95,
     depthWrite: false,
-    toneMapped: true,
+    toneMapped: false,
   });
-  const disc = new THREE.Mesh(new THREE.PlaneGeometry(2.45, 2.45), glowMat);
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.5), glowMat);
   disc.name = 'PadGlow';
   disc.rotation.x = -Math.PI / 2;
-  disc.position.y = 0.02;
-  disc.renderOrder = 2;
+  disc.position.y = 0.035;
+  disc.renderOrder = 3;
+  const center = new THREE.Mesh(
+    new THREE.CircleGeometry(0.5, 40),
+    new THREE.MeshBasicMaterial({ color: 0xfff4ea, toneMapped: false }),
+  );
+  center.name = 'PadCenter';
+  center.rotation.x = -Math.PI / 2;
+  center.position.y = 0.028;
+  center.renderOrder = 2;
   const glow = new THREE.PointLight(0xff4a38, 0.08, 2.3, 2);
   glow.position.set(0, 0.16, 0);
-  pad.add(disc, glow);
+  pad.add(center, disc, glow);
   return { glowMat, glow, bandMats: [] };
 }
 

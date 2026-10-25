@@ -9,10 +9,10 @@ function makeSky(): THREE.Mesh {
   const pos = geo.attributes.position;
   if (!pos) throw new Error('天空几何缺少顶点');
   const colors = new Float32Array(pos.count * 3);
-  const zenith = new THREE.Color('#9ecff2');
+  const zenith = new THREE.Color('#8ec4f0');
   const mid = new THREE.Color('#d7eef8');
   const horizon = new THREE.Color('#f4efe6');
-  const warm = new THREE.Color('#ffe4c6');
+  const warm = new THREE.Color('#ffe0c0');
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i += 1) {
     const h = pos.getY(i) / 240;
@@ -44,9 +44,9 @@ function makeSky(): THREE.Mesh {
 
 export function buildMeadow(scene: THREE.Scene): Meadow {
   scene.background = new THREE.Color('#f4efe6');
-  // Warm-white haze well past the phone camera, so FIND stays sharp
-  // and only the far meadow softens. Green fog reads as a void.
-  scene.fog = new THREE.Fog(0xf4efe6, 42, 78);
+  // Far field fades on the meadow shader (world XZ), not with camera fog.
+  // Camera fog would wash FIND when the phone camera sits ~28m back.
+  scene.fog = null;
   scene.add(makeSky());
 
   const hemi = new THREE.HemisphereLight(0xfff3e4, 0x6ea04a, 0.28);
@@ -65,7 +65,7 @@ export function buildMeadow(scene: THREE.Scene): Meadow {
   key.shadow.camera.bottom = -7;
   key.shadow.bias = -0.0003;
   key.shadow.normalBias = 0.018;
-  key.shadow.intensity = 0.26;
+  key.shadow.intensity = 0.36;
   key.shadow.radius = 2.4;
   scene.add(key);
   scene.add(key.target);
