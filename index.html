@@ -4,28 +4,54 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#87CEEB" />
+  <meta name="theme-color" content="#6bb3d9" />
+  <link rel="icon" href="favicon.png" type="image/png" />
   <title>数字积木 · 第一集：一</title>
-  <link rel="stylesheet" href="style.css?v=1" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
   <div id="app">
-    <canvas id="game" aria-label="数字积木游戏画布"></canvas>
-    <div id="hud" class="hud">
-      <div id="episode-tag">第一集 · 一</div>
-      <button id="btn-skip" class="ghost" type="button" hidden>跳过引导</button>
+    <canvas id="c"></canvas>
+
+    <div id="vignette"></div>
+
+    <header class="topbar">
+      <div class="pill">第一集 · 一</div>
+      <button id="btn-mute" class="icon-btn" type="button" aria-label="静音" title="静音">♪</button>
+    </header>
+
+    <div id="speech" class="speech" hidden>
+      <p id="speech-text"></p>
     </div>
-    <div id="overlay" class="overlay" hidden>
-      <div class="card" id="card">
-        <h1 id="card-title"></h1>
-        <p id="card-body"></p>
-        <div class="btn-row" id="card-btns"></div>
+
+    <div id="hint" class="hint" hidden></div>
+
+    <div id="progress" class="progress" hidden>
+      <span data-id="sun">☀</span>
+      <span data-id="tree">🌳</span>
+      <span data-id="bee">🐝</span>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <div class="card">
+        <div class="card-cube" aria-hidden="true"></div>
+        <h1>数字积木</h1>
+        <h2>第一集 · 一</h2>
+        <p>在柔和的小世界里，认识「一」——一块、一个、一棵。</p>
+        <button id="btn-start" class="btn-primary" type="button">开始探索</button>
+        <p class="fine">原创画面与音效 · 非官方作品</p>
       </div>
     </div>
-    <div id="speech" class="speech" hidden>
-      <div class="speech-bubble" id="speech-text"></div>
+
+    <div id="endcard" class="overlay" hidden>
+      <div class="card">
+        <h1>真棒！</h1>
+        <p>你认识了「一」。下一集「二」还在准备中。</p>
+        <button id="btn-replay" class="btn-primary" type="button">再玩一次</button>
+        <button id="btn-next" class="btn-ghost" type="button">下一集：二（未开放）</button>
+      </div>
     </div>
   </div>
-  <script src="game.js?v=1"></script>
+  <script type="module" src="game.js?v=5"></script>
 </body>
 </html>

@@ -1,746 +1,873 @@
-/* 数字积木 · 第一集：一
- * 原创美术与玩法，非 Numberblocks 官方素材。
+/**
+ * 数字积木 · 第一集：一 — Three.js 精致小场景
+ * 原创美术与音效，非 Numberblocks / 塞尔达官方素材。
  */
-(() => {
-  "use strict";
+import * as THREE from "./vendor/three.module.min.js";
+import { RoundedBoxGeometry } from "./vendor/addons/geometries/RoundedBoxGeometry.js";
+import { AudioBus } from "./audio.js?v=5";
 
-  const W = 720;
-  const H = 480;
-  const UNIT = 64; // 单位方块边长（逻辑像素）
+const canvas = document.getElementById("c");
+const overlay = document.getElementById("overlay");
+const endcard = document.getElementById("endcard");
+const speechEl = document.getElementById("speech");
+const speechText = document.getElementById("speech-text");
+const hintEl = document.getElementById("hint");
+const progressEl = document.getElementById("progress");
+const btnStart = document.getElementById("btn-start");
+const btnReplay = document.getElementById("btn-replay");
+const btnNext = document.getElementById("btn-next");
+const btnMute = document.getElementById("btn-mute");
 
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  const overlay = document.getElementById("overlay");
-  const cardTitle = document.getElementById("card-title");
-  const cardBody = document.getElementById("card-body");
-  const cardBtns = document.getElementById("card-btns");
-  const speechEl = document.getElementById("speech");
-  const speechText = document.getElementById("speech-text");
-  const btnSkip = document.getElementById("btn-skip");
+const audio = new AudioBus();
+const PHASE = { TITLE: 0, INTRO: 1, EXPLORE: 2, BUILD: 3, CELEBRATE: 4 };
+let phase = PHASE.TITLE;
+let introStep = 0;
+let exploreDone = { sun: false, tree: false, bee: false };
+let buildPlaced = false;
+let speechTimer = 0;
 
-  let dpr = 1;
-  let scale = 1;
-  let offsetX = 0;
-  let offsetY = 0;
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: false,
+  powerPreference: "high-performance",
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // ---------- state ----------
-  const PHASE = {
-    TITLE: "title",
-    INTRO: "intro",
-    EXPLORE: "explore",
-    BUILD: "build",
-    CELEBRATE: "celebrate",
-  };
-  let phase = PHASE.TITLE;
-  let t0 = performance.now();
-  let phaseT = 0;
-  let pointer = { x: 0, y: 0, down: false, id: null };
-  let drag = null; // { kind, ox, oy }
-  let confetti = [];
-  let bounce = null; // tray cube bounce-back anim
-  let exploreDone = { sun: false, tree: false, bee: false };
-  let explorePulse = null; // { id, t }
-  let buildPlaced = false;
-  let buildFlash = 0;
-  let onePos = { x: W / 2 - UNIT / 2, y: H / 2 - UNIT / 2 };
-  let trayCube = { x: 48, y: H - 48 - UNIT, homeX: 48, homeY: H - 48 - UNIT };
-  let pad = { x: W / 2 - UNIT / 2, y: H / 2 - UNIT / 2 + 20, w: UNIT, h: UNIT };
-  let introStep = 0;
-  let lastTap = 0;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b8d8);
+scene.fog = new THREE.FogExp2(0xa8cfe0, 0.012);
 
-  // 场景道具（可点计数）
-  const props = [
-    { id: "sun",  label: "太阳", x: 560, y: 48,  r: 36 },
-    { id: "tree", label: "树",   x: 120, y: 250, r: 42 },
-    { id: "bee",  label: "蜜蜂", x: 520, y: 220, r: 28 },
-  ];
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
+const camHome = new THREE.Vector3(0, 5.8, 9.4);
+const camDesired = camHome.clone();
+const camTarget = new THREE.Vector3(0, 1.0, 0.5);
+camera.position.copy(camHome);
+camera.lookAt(camTarget);
 
-  // ---------- resize ----------
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 3);
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    scale = Math.min(vw / W, vh / H);
-    const cssW = Math.floor(W * scale);
-    const cssH = Math.floor(H * scale);
-    canvas.style.width = cssW + "px";
-    canvas.style.height = cssH + "px";
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const rect = canvas.getBoundingClientRect();
-    offsetX = rect.left;
-    offsetY = rect.top;
+// cinematic intro camera
+let camAnim = null; // {t0, dur, from, to}
+
+// ---------- lights (warm, readable) ----------
+const hemi = new THREE.HemisphereLight(0xfff2d6, 0x3d6b45, 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d2, 1.35);
+sun.position.set(6, 14, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 40;
+sun.shadow.camera.left = -12;
+sun.shadow.camera.right = 12;
+sun.shadow.camera.top = 12;
+sun.shadow.camera.bottom = -12;
+sun.shadow.bias = -0.00025;
+sun.shadow.normalBias = 0.03;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xa8d4ff, 0.28);
+fill.position.set(-8, 4, -6);
+scene.add(fill);
+
+// ---------- ground / meadow ----------
+function makeGrassTexture() {
+  const s = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  g.fillStyle = "#6faf5e";
+  g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * s;
+    const y = Math.random() * s;
+    const shade = 90 + Math.random() * 50;
+    g.fillStyle = `rgba(${shade * 0.55},${shade},${shade * 0.4},${0.15 + Math.random() * 0.35})`;
+    g.fillRect(x, y, 1 + Math.random() * 2, 2 + Math.random() * 3);
   }
-  window.addEventListener("resize", resize);
-  window.addEventListener("orientationchange", () => setTimeout(resize, 120));
-  resize();
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(8, 8);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
-  // ---------- helpers ----------
-  function now() { return (performance.now() - t0) / 1000; }
-  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-  function dist(ax, ay, bx, by) {
-    const dx = ax - bx, dy = ay - by;
-    return Math.hypot(dx, dy);
-  }
-  function hitRect(px, py, r) {
-    return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
-  }
-  function clientToGame(cx, cy) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (cx - rect.left) / (rect.width / W),
-      y: (cy - rect.top) / (rect.height / H),
-    };
-  }
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(28, 64),
+  new THREE.MeshStandardMaterial({
+    map: makeGrassTexture(),
+    roughness: 0.92,
+    metalness: 0.0,
+  })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
 
-  function showSpeech(text, ms = 2800) {
-    speechText.textContent = text;
-    speechEl.hidden = false;
-    clearTimeout(showSpeech._t);
-    if (ms > 0) {
-      showSpeech._t = setTimeout(() => { speechEl.hidden = true; }, ms);
-    }
-  }
-  function hideSpeech() {
-    speechEl.hidden = true;
-    clearTimeout(showSpeech._t);
-  }
+// soft distant hills
+function hill(x, z, r, h, color) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(r, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.95 })
+  );
+  m.scale.y = h / r;
+  m.position.set(x, 0, z);
+  m.receiveShadow = true;
+  scene.add(m);
+}
+hill(-8, -8, 6, 2.4, 0x5a9a58);
+hill(7, -9, 7, 2.8, 0x4f8f52);
+hill(0, -12, 9, 3.4, 0x45874a);
 
-  function showCard(title, body, buttons) {
-    cardTitle.textContent = title;
-    cardBody.textContent = body;
-    cardBtns.innerHTML = "";
-    buttons.forEach((b) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = b.primary ? "btn-primary" : "btn-secondary";
-      btn.textContent = b.label;
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        b.onClick();
-      });
-      cardBtns.appendChild(btn);
-    });
-    overlay.hidden = false;
-  }
-  function hideCard() { overlay.hidden = true; }
+// ---------- props ----------
+const props = {};
 
-  // ---------- drawing: original One block ----------
-  function drawOneBlock(x, y, size, opts = {}) {
-    const s = size;
-    const face = opts.face !== false;
-    const glow = opts.glow || 0;
-    const bob = opts.bob || 0;
-    const yy = y + bob;
+function makeWorldLabel(text) {
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 96;
+  const g = c.getContext("2d");
+  g.clearRect(0,0,256,96);
+  g.fillStyle = "rgba(255,252,245,0.92)";
+  g.strokeStyle = "rgba(192,57,43,0.55)";
+  g.lineWidth = 6;
+  const r=28;
+  g.beginPath();
+  g.moveTo(r,8); g.arcTo(248,8,248,88,r); g.arcTo(248,88,8,88,r); g.arcTo(8,88,8,8,r); g.arcTo(8,8,248,8,r);
+  g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = "#c0392b";
+  g.font = "bold 44px system-ui,sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(text, 128, 50);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  m.scale.set(1.4, 0.52, 1);
+  m.visible = false;
+  return m;
+}
 
-    ctx.save();
-    if (glow > 0) {
-      ctx.shadowColor = `rgba(231,76,60,${0.35 + glow * 0.4})`;
-      ctx.shadowBlur = 18 + glow * 12;
-    }
 
-    // 立体顶面 / 侧面（原创几何，非官方造型）
-    const depth = s * 0.18;
-    // 顶
-    ctx.beginPath();
-    ctx.moveTo(x, yy);
-    ctx.lineTo(x + s * 0.55, yy - depth);
-    ctx.lineTo(x + s + s * 0.18, yy - depth * 0.35);
-    ctx.lineTo(x + s, yy);
-    ctx.closePath();
-    ctx.fillStyle = "#ff8a7a";
-    ctx.fill();
-
-    // 右侧面
-    ctx.beginPath();
-    ctx.moveTo(x + s, yy);
-    ctx.lineTo(x + s + s * 0.18, yy - depth * 0.35);
-    ctx.lineTo(x + s + s * 0.18, yy + s - depth * 0.35);
-    ctx.lineTo(x + s, yy + s);
-    ctx.closePath();
-    ctx.fillStyle = "#a93226";
-    ctx.fill();
-
-    // 正面
-    const g = ctx.createLinearGradient(x, yy, x, yy + s);
-    g.addColorStop(0, "#ff6b5a");
-    g.addColorStop(1, "#e74c3c");
-    ctx.fillStyle = g;
-    roundRect(x, yy, s, s, s * 0.1);
-    ctx.fill();
-
-    // 边框
-    ctx.strokeStyle = "#922b21";
-    ctx.lineWidth = Math.max(2, s * 0.04);
-    roundRect(x, yy, s, s, s * 0.1);
-    ctx.stroke();
-
-    // 正面高光条
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    roundRect(x + s * 0.1, yy + s * 0.08, s * 0.8, s * 0.18, s * 0.06);
-    ctx.fill();
-
-    if (face) {
-      // 原创表情：圆眼 + 微笑
-      const eyeY = yy + s * 0.38;
-      const eyeR = s * 0.09;
-      const eyeGap = s * 0.22;
-      ctx.fillStyle = "#2c3e50";
-      ctx.beginPath();
-      ctx.arc(x + s * 0.5 - eyeGap, eyeY, eyeR, 0, Math.PI * 2);
-      ctx.arc(x + s * 0.5 + eyeGap, eyeY, eyeR, 0, Math.PI * 2);
-      ctx.fill();
-      // 眼神白点
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(x + s * 0.5 - eyeGap + eyeR * 0.3, eyeY - eyeR * 0.3, eyeR * 0.35, 0, Math.PI * 2);
-      ctx.arc(x + s * 0.5 + eyeGap + eyeR * 0.3, eyeY - eyeR * 0.3, eyeR * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // 微笑
-      ctx.strokeStyle = "#2c3e50";
-      ctx.lineWidth = Math.max(2, s * 0.05);
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.arc(x + s * 0.5, yy + s * 0.55, s * 0.18, 0.15 * Math.PI, 0.85 * Math.PI);
-      ctx.stroke();
-    }
-
-    // 数字「1」小徽章（角落）
-    if (opts.badge !== false) {
-      const bx = x + s * 0.72;
-      const by = yy + s * 0.72;
-      const br = s * 0.16;
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(bx, by, br, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c0392b";
-      ctx.font = `bold ${Math.floor(s * 0.22)}px system-ui,sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("1", bx, by + 1);
-    }
-
-    ctx.restore();
-  }
-
-  function roundRect(x, y, w, h, r) {
-    const rr = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x, y + h, rr);
-    ctx.arcTo(x, y + h, x, y, rr);
-    ctx.arcTo(x, y, x + w, y, rr);
-    ctx.closePath();
-  }
-
-  function drawSceneBackground() {
-    // 天空
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, "#7ec8f5");
-    sky.addColorStop(0.55, "#b8e4ff");
-    sky.addColorStop(0.55, "#8fd18a");
-    sky.addColorStop(1, "#6bb36a");
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-
-    // 远山
-    ctx.fillStyle = "#5fa86a";
-    ctx.beginPath();
-    ctx.moveTo(0, 280);
-    ctx.quadraticCurveTo(180, 210, 360, 270);
-    ctx.quadraticCurveTo(520, 220, 720, 275);
-    ctx.lineTo(720, 320);
-    ctx.lineTo(0, 320);
-    ctx.fill();
-
-    // 地面
-    ctx.fillStyle = "#7ec46f";
-    ctx.fillRect(0, 300, W, H - 300);
-    // 草地纹理点
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
-    for (let i = 0; i < 40; i++) {
-      const gx = (i * 97 + 40) % W;
-      const gy = 310 + ((i * 53) % 140);
-      ctx.fillRect(gx, gy, 3, 3);
-    }
-  }
-
-  function drawSun(p, highlight) {
-    const { x, y, r } = p;
-    ctx.save();
-    if (highlight) {
-      ctx.shadowColor = "#f1c40f";
-      ctx.shadowBlur = 24;
-    }
-    // 光芒
-    ctx.strokeStyle = "#f9e79f";
-    ctx.lineWidth = 4;
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + now() * 0.3;
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(a) * (r + 4), y + Math.sin(a) * (r + 4));
-      ctx.lineTo(x + Math.cos(a) * (r + 16), y + Math.sin(a) * (r + 16));
-      ctx.stroke();
-    }
-    const g = ctx.createRadialGradient(x - 8, y - 8, 4, x, y, r);
-    g.addColorStop(0, "#fff6a5");
-    g.addColorStop(1, "#f1c40f");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawTree(p, highlight) {
-    const { x, y } = p;
-    ctx.save();
-    if (highlight) {
-      ctx.shadowColor = "#27ae60";
-      ctx.shadowBlur = 18;
-    }
-    // 树干
-    ctx.fillStyle = "#8b5a2b";
-    roundRect(x - 10, y + 10, 20, 55, 4);
-    ctx.fill();
-    // 树冠（三层圆）
-    ctx.fillStyle = "#27ae60";
-    ctx.beginPath();
-    ctx.arc(x, y - 10, 38, 0, Math.PI * 2);
-    ctx.arc(x - 28, y + 8, 28, 0, Math.PI * 2);
-    ctx.arc(x + 28, y + 8, 28, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#2ecc71";
-    ctx.beginPath();
-    ctx.arc(x, y - 18, 22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawBee(p, highlight) {
-    const { x, y } = p;
-    const flap = Math.sin(now() * 12) * 4;
-    ctx.save();
-    if (highlight) {
-      ctx.shadowColor = "#f39c12";
-      ctx.shadowBlur = 16;
-    }
-    // 翅膀
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.beginPath();
-    ctx.ellipse(x - 10, y - 10 - flap, 14, 8, -0.4, 0, Math.PI * 2);
-    ctx.ellipse(x + 10, y - 10 + flap, 14, 8, 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    // 身体
-    ctx.fillStyle = "#f1c40f";
-    ctx.beginPath();
-    ctx.ellipse(x, y, 18, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 条纹
-    ctx.strokeStyle = "#2c3e50";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(x - 4, y - 10);
-    ctx.lineTo(x - 4, y + 10);
-    ctx.moveTo(x + 4, y - 10);
-    ctx.lineTo(x + 4, y + 10);
-    ctx.stroke();
-    // 眼睛
-    ctx.fillStyle = "#2c3e50";
-    ctx.beginPath();
-    ctx.arc(x + 10, y - 2, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawCountBadge(x, y, n) {
-    ctx.save();
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "#e74c3c";
-    ctx.lineWidth = 3;
-    roundRect(x - 22, y - 22, 44, 44, 12);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#c0392b";
-    ctx.font = "bold 26px system-ui,sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(n), x, y + 1);
-    ctx.restore();
-  }
-
-  function drawPad() {
-    // 剪影垫
-    ctx.save();
-    ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = "rgba(192,57,43,0.55)";
-    ctx.lineWidth = 3;
-    ctx.fillStyle = "rgba(231,76,60,0.12)";
-    roundRect(pad.x, pad.y, pad.w, pad.h, 8);
-    ctx.fill();
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(192,57,43,0.45)";
-    ctx.font = "bold 36px system-ui,sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    if (!buildPlaced) ctx.fillText("1", pad.x + pad.w / 2, pad.y + pad.h / 2);
-    ctx.restore();
-  }
-
-  function drawTray() {
-    // 底部托盘
-    ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    roundRect(16, H - 48 - UNIT - 20, 140, UNIT + 40, 16);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.12)";
-    ctx.lineWidth = 2;
-    roundRect(16, H - 48 - UNIT - 20, 140, UNIT + 40, 16);
-    ctx.stroke();
-    ctx.fillStyle = "#7f8c8d";
-    ctx.font = "bold 14px system-ui,sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("积木盒", 16 + 70, H - 48 - UNIT - 6);
-    ctx.restore();
-  }
-
-  function spawnConfetti(n = 60) {
-    confetti = [];
-    for (let i = 0; i < n; i++) {
-      confetti.push({
-        x: W * 0.3 + Math.random() * W * 0.4,
-        y: -20 - Math.random() * 80,
-        vx: (Math.random() - 0.5) * 4,
-        vy: 1.5 + Math.random() * 3,
-        rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.2,
-        color: ["#e74c3c", "#f1c40f", "#3498db", "#2ecc71", "#9b59b6", "#fff"][i % 6],
-        w: 8 + Math.random() * 8,
-        h: 5 + Math.random() * 5,
-      });
-    }
-  }
-
-  function updateConfetti() {
-    for (const c of confetti) {
-      c.x += c.vx;
-      c.y += c.vy;
-      c.vy += 0.04;
-      c.rot += c.vr;
-    }
-    confetti = confetti.filter((c) => c.y < H + 40);
-  }
-
-  function drawConfetti() {
-    for (const c of confetti) {
-      ctx.save();
-      ctx.translate(c.x, c.y);
-      ctx.rotate(c.rot);
-      ctx.fillStyle = c.color;
-      ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
-      ctx.restore();
-    }
-  }
-
-  // ---------- phases ----------
-  function startTitle() {
-    phase = PHASE.TITLE;
-    hideSpeech();
-    showCard(
-      "数字积木 · 第一集：一",
-      "认识「一」——只有一块。拖一拖、点一点，一起找找场景里有多少个「1」。",
-      [{ label: "开始玩", primary: true, onClick: () => { hideCard(); startIntro(); } }]
+function makeSunProp() {
+  const g = new THREE.Group();
+  g.name = "sun";
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.72, 24, 24),
+    new THREE.MeshStandardMaterial({
+      color: 0xffe566,
+      emissive: 0xffb000,
+      emissiveIntensity: 0.65,
+      roughness: 0.35,
+    })
+  );
+  core.castShadow = true;
+  g.add(core);
+  const glow = new THREE.PointLight(0xffcc66, 0.9, 10, 2);
+  g.add(glow);
+  // rays
+  for (let i = 0; i < 8; i++) {
+    const ray = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.45, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0xffaa00, emissiveIntensity: 0.4 })
     );
+    const a = (i / 8) * Math.PI * 2;
+    ray.position.set(Math.cos(a) * 1.05, Math.sin(a) * 1.05, 0);
+    ray.rotation.z = a;
+    g.add(ray);
   }
+  g.position.set(2.0, 2.15, 2.6);
+  scene.add(g);
+  props.sun = { group: g, hit: core, label: "太阳" };
+}
 
-  function startIntro() {
-    phase = PHASE.INTRO;
-    phaseT = now();
-    introStep = 0;
-    onePos = { x: W / 2 - UNIT / 2, y: H / 2 - 20 };
-    btnSkip.hidden = false;
-    showSpeech("你好！我是「一」。", 0);
-  }
-
-  function advanceIntro() {
-    introStep++;
-    if (introStep === 1) {
-      showSpeech("只有一块。一就是一。", 0);
-    } else if (introStep === 2) {
-      showSpeech("拖我到处走走，再点点太阳、树和蜜蜂——每样都是 1 个！", 0);
-    } else {
-      startExplore();
-    }
-  }
-
-  function startExplore() {
-    phase = PHASE.EXPLORE;
-    phaseT = now();
-    exploreDone = { sun: false, tree: false, bee: false };
-    btnSkip.hidden = true;
-    showSpeech("点一点：太阳、树、蜜蜂。每样都是「1」～", 3500);
-  }
-
-  function maybeFinishExplore() {
-    if (exploreDone.sun && exploreDone.tree && exploreDone.bee) {
-      setTimeout(() => startBuild(), 700);
-    }
-  }
-
-  function startBuild() {
-    phase = PHASE.BUILD;
-    phaseT = now();
-    buildPlaced = false;
-    trayCube = { x: 48, y: H - 48 - UNIT, homeX: 48, homeY: H - 48 - UNIT };
-    bounce = null;
-    showSpeech("从积木盒拖出一块，放到虚线格子上，做出「一」。", 4000);
-  }
-
-  function startCelebrate() {
-    phase = PHASE.CELEBRATE;
-    phaseT = now();
-    hideSpeech();
-    spawnConfetti(80);
-    setTimeout(() => {
-      showCard(
-        "真棒！",
-        "你认识了「一」——一块积木、一个太阳、一棵树、一只蜜蜂。下一集「二」还没开放，可以再玩一遍第一集。",
-        [
-          { label: "再玩一次", primary: true, onClick: () => { hideCard(); startIntro(); } },
-          { label: "下一集：二（未开放）", primary: false, onClick: () => {
-            showSpeech("下一集还在准备中，先再玩一遍「一」吧！", 2500);
-          }},
-        ]
-      );
-    }, 900);
-  }
-
-  btnSkip.addEventListener("click", () => {
-    if (phase === PHASE.INTRO) startExplore();
+function makeTreeProp() {
+  const g = new THREE.Group();
+  g.name = "tree";
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.26, 1.4, 10),
+    new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 })
+  );
+  trunk.position.y = 0.7;
+  trunk.castShadow = true;
+  g.add(trunk);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f9e4f, roughness: 0.75 });
+  [[0, 2.0, 0, 1.1], [-0.45, 1.55, 0.2, 0.85], [0.5, 1.6, -0.15, 0.9]].forEach(([x, y, z, r]) => {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), leafMat);
+    leaf.position.set(x, y, z);
+    leaf.castShadow = true;
+    leaf.receiveShadow = true;
+    g.add(leaf);
   });
+  g.position.set(-2.2, 0, 1.2);
+  scene.add(g);
+  props.tree = { group: g, hit: trunk, label: "树" };
+}
 
-  // ---------- input ----------
-  function onDown(cx, cy, id) {
-    if (!overlay.hidden) return;
-    const p = clientToGame(cx, cy);
-    pointer.x = p.x; pointer.y = p.y; pointer.down = true; pointer.id = id;
-    canvas.classList.add("dragging");
-
-    if (phase === PHASE.INTRO) {
-      advanceIntro();
-      return;
-    }
-
-    if (phase === PHASE.EXPLORE) {
-      // 先判断是否点道具
-      for (const prop of props) {
-        if (dist(p.x, p.y, prop.x, prop.y) <= prop.r + 16) {
-          if (!exploreDone[prop.id]) {
-            exploreDone[prop.id] = true;
-            explorePulse = { id: prop.id, t: now() };
-            showSpeech(`${prop.label} —— 1 个！`, 1800);
-            maybeFinishExplore();
-          } else {
-            showSpeech(`还是 1 个${prop.label}。`, 1200);
-          }
-          return;
-        }
-      }
-      // 拖 One
-      if (hitRect(p.x, p.y, { x: onePos.x, y: onePos.y, w: UNIT, h: UNIT })) {
-        drag = { kind: "one", ox: p.x - onePos.x, oy: p.y - onePos.y };
-      }
-      return;
-    }
-
-    if (phase === PHASE.BUILD && !buildPlaced) {
-      const tc = bounce ? bounce : trayCube;
-      if (hitRect(p.x, p.y, { x: tc.x, y: tc.y, w: UNIT, h: UNIT })) {
-        drag = { kind: "tray", ox: p.x - tc.x, oy: p.y - tc.y };
-        bounce = null;
-      }
-    }
-  }
-
-  function onMove(cx, cy, id) {
-    if (!pointer.down || (id != null && pointer.id != null && id !== pointer.id)) return;
-    const p = clientToGame(cx, cy);
-    pointer.x = p.x; pointer.y = p.y;
-    if (!drag) return;
-    if (drag.kind === "one") {
-      onePos.x = clamp(p.x - drag.ox, 8, W - UNIT - 8);
-      onePos.y = clamp(p.y - drag.oy, 8, H - UNIT - 8);
-    } else if (drag.kind === "tray") {
-      trayCube.x = clamp(p.x - drag.ox, 0, W - UNIT);
-      trayCube.y = clamp(p.y - drag.oy, 0, H - UNIT);
-    }
-  }
-
-  function onUp(cx, cy, id) {
-    if (id != null && pointer.id != null && id !== pointer.id) return;
-    pointer.down = false;
-    canvas.classList.remove("dragging");
-    if (!drag) return;
-
-    if (drag.kind === "tray" && phase === PHASE.BUILD && !buildPlaced) {
-      const cx0 = trayCube.x + UNIT / 2;
-      const cy0 = trayCube.y + UNIT / 2;
-      const pcx = pad.x + pad.w / 2;
-      const pcy = pad.y + pad.h / 2;
-      if (dist(cx0, cy0, pcx, pcy) < UNIT * 0.75) {
-        // 成功放到垫上
-        trayCube.x = pad.x;
-        trayCube.y = pad.y;
-        buildPlaced = true;
-        buildFlash = now();
-        showSpeech("正好一块！这就是「一」。", 2000);
-        setTimeout(() => startCelebrate(), 1100);
-      } else {
-        // 弹回托盘，不惩罚
-        bounce = {
-          x: trayCube.x, y: trayCube.y,
-          tx: trayCube.homeX, ty: trayCube.homeY,
-          t0: now(), dur: 0.35,
-        };
-        showSpeech("轻轻放到虚线格子里哦～", 1800);
-      }
-    }
-    drag = null;
-  }
-
-  canvas.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    onDown(e.clientX, e.clientY, "mouse");
+function makeBeeProp() {
+  const g = new THREE.Group();
+  g.name = "bee";
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.45 })
+  );
+  body.scale.set(1.35, 0.95, 1.0);
+  body.castShadow = true;
+  g.add(body);
+  const stripe = new THREE.Mesh(
+    new THREE.TorusGeometry(0.22, 0.05, 8, 16),
+    new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
+  );
+  stripe.rotation.y = Math.PI / 2;
+  g.add(stripe);
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.55, roughness: 0.2, side: THREE.DoubleSide,
   });
-  window.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY, "mouse"));
-  window.addEventListener("mouseup", (e) => onUp(e.clientX, e.clientY, "mouse"));
+  const w1 = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), wingMat);
+  w1.position.set(-0.15, 0.18, 0.05);
+  w1.rotation.x = -0.6;
+  const w2 = w1.clone();
+  w2.position.x = 0.15;
+  g.add(w1, w2);
+  g.userData.wings = [w1, w2];
+  g.position.set(1.7, 1.55, 3.5);
+  scene.add(g);
+  props.bee = { group: g, hit: body, label: "蜜蜂" };
+}
 
-  canvas.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    onDown(t.clientX, t.clientY, t.identifier);
-  }, { passive: false });
-  canvas.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    onMove(t.clientX, t.clientY, t.identifier);
-  }, { passive: false });
-  canvas.addEventListener("touchend", (e) => {
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    onUp(t.clientX, t.clientY, t.identifier);
-  }, { passive: false });
-  canvas.addEventListener("touchcancel", (e) => {
-    const t = e.changedTouches[0];
-    onUp(t.clientX, t.clientY, t.identifier);
-  });
 
-  // ---------- render loop ----------
-  function frame() {
-    const t = now();
-    drawSceneBackground();
-
-    // 道具
-    const hi = explorePulse && (t - explorePulse.t) < 0.8 ? explorePulse.id : null;
-    for (const prop of props) {
-      const on = hi === prop.id || (phase === PHASE.EXPLORE && exploreDone[prop.id]);
-      if (prop.id === "sun") drawSun(prop, on);
-      if (prop.id === "tree") drawTree(prop, on);
-      if (prop.id === "bee") drawBee(prop, on);
-      if (phase === PHASE.EXPLORE && exploreDone[prop.id]) {
-        drawCountBadge(prop.x, prop.y - prop.r - 28, 1);
-      }
-    }
-
-    // 进度点（探索阶段）
-    if (phase === PHASE.EXPLORE) {
-      const labels = ["太阳", "树", "蜜蜂"];
-      const ids = ["sun", "tree", "bee"];
-      ids.forEach((id, i) => {
-        const done = exploreDone[id];
-        const px = W / 2 - 60 + i * 60;
-        const py = 28;
-        ctx.beginPath();
-        ctx.arc(px, py, 10, 0, Math.PI * 2);
-        ctx.fillStyle = done ? "#e74c3c" : "rgba(255,255,255,0.7)";
-        ctx.fill();
-        ctx.strokeStyle = "#c0392b";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        if (done) {
-          ctx.fillStyle = "#fff";
-          ctx.font = "bold 12px system-ui";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("1", px, py + 1);
-        }
-      });
-    }
-
-    if (phase === PHASE.INTRO || phase === PHASE.EXPLORE) {
-      const bob = Math.sin(t * 2.2) * 4;
-      drawOneBlock(onePos.x, onePos.y, UNIT, { bob, glow: phase === PHASE.INTRO ? 0.6 : 0.2 });
-      if (phase === PHASE.INTRO) {
-        // 轻提示：点屏幕继续
-        if (Math.floor(t * 2) % 2 === 0) {
-          ctx.fillStyle = "rgba(44,62,80,0.55)";
-          ctx.font = "16px system-ui,sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("点一下继续 ›", W / 2, H - 70);
-        }
-      }
-    }
-
-    if (phase === PHASE.BUILD || phase === PHASE.CELEBRATE) {
-      drawTray();
-      drawPad();
-
-      // bounce 动画
-      let drawX = trayCube.x, drawY = trayCube.y;
-      if (bounce) {
-        const u = clamp((t - bounce.t0) / bounce.dur, 0, 1);
-        const e = 1 - Math.pow(1 - u, 3);
-        drawX = bounce.x + (bounce.tx - bounce.x) * e;
-        drawY = bounce.y + (bounce.ty - bounce.y) * e;
-        trayCube.x = drawX;
-        trayCube.y = drawY;
-        if (u >= 1) bounce = null;
-      }
-
-      const glow = buildPlaced ? 0.8 + Math.sin((t - buildFlash) * 8) * 0.3 : 0.15;
-      if (!(phase === PHASE.CELEBRATE && buildPlaced && (t - phaseT) > 0.5)) {
-        drawOneBlock(drawX, drawY, UNIT, { glow, face: true });
-      }
-
-      // 庆祝时放大的 1
-      if (phase === PHASE.CELEBRATE) {
-        updateConfetti();
-        drawConfetti();
-        const k = clamp((t - phaseT) / 0.5, 0, 1);
-        const s = UNIT + k * 80;
-        const bx = W / 2 - s / 2;
-        const by = H / 2 - s / 2 - 30;
-        drawOneBlock(bx, by, s, { glow: 1, face: true, bob: Math.sin(t * 3) * 6 });
-        ctx.fillStyle = "#c0392b";
-        ctx.font = "bold 42px system-ui,sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("1", W / 2, by + s + 48);
-      }
-    }
-
-    // 标题页轻背景块
-    if (phase === PHASE.TITLE) {
-      drawOneBlock(W / 2 - 48, H / 2 - 90, 96, { glow: 0.5, bob: Math.sin(t * 2) * 5 });
-    }
-
-    requestAnimationFrame(frame);
+// little meadow flowers (readable silhouettes)
+(function scatterFlowers() {
+  const colors = [0xff6b81, 0xffe066, 0xffffff, 0xc39bd3];
+  for (let i = 0; i < 18; i++) {
+    const g = new THREE.Group();
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.025, 0.35, 5),
+      new THREE.MeshStandardMaterial({ color: 0x3d8b4a, roughness: 0.85 })
+    );
+    stem.position.y = 0.175;
+    g.add(stem);
+    const petal = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 10, 8),
+      new THREE.MeshStandardMaterial({ color: colors[i % colors.length], roughness: 0.55 })
+    );
+    petal.position.y = 0.38;
+    petal.scale.y = 0.55;
+    g.add(petal);
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 1.8 + Math.random() * 4.5;
+    g.position.set(Math.cos(ang) * rad, 0, Math.sin(ang) * rad * 0.7 + 1.0);
+    g.rotation.y = Math.random() * Math.PI;
+    scene.add(g);
   }
-
-  // boot
-  startTitle();
-  requestAnimationFrame(frame);
 })();
+
+makeSunProp();
+makeTreeProp();
+makeBeeProp();
+
+props.sun.labelSprite = makeWorldLabel("太阳 · 1");
+props.sun.labelSprite.position.set(0, 1.3, 0);
+props.sun.group.add(props.sun.labelSprite);
+props.tree.labelSprite = makeWorldLabel("树 · 1");
+props.tree.labelSprite.position.set(0, 3.2, 0);
+props.tree.group.add(props.tree.labelSprite);
+props.bee.labelSprite = makeWorldLabel("蜜蜂 · 1");
+props.bee.labelSprite.position.set(0, 0.9, 0);
+props.bee.group.add(props.bee.labelSprite);
+
+
+// ---------- One cube (original character) ----------
+function makeFaceTexture() {
+  const s = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  // transparent bg — only face features
+  g.clearRect(0, 0, s, s);
+  // eyes
+  g.fillStyle = "#1f2a36";
+  g.beginPath(); g.arc(92, 110, 22, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(164, 110, 22, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#fff";
+  g.beginPath(); g.arc(98, 104, 8, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(170, 104, 8, 0, Math.PI * 2); g.fill();
+  // smile
+  g.strokeStyle = "#1f2a36";
+  g.lineWidth = 10;
+  g.lineCap = "round";
+  g.beginPath();
+  g.arc(128, 145, 36, 0.15 * Math.PI, 0.85 * Math.PI);
+  g.stroke();
+  // cheek blush
+  g.fillStyle = "rgba(255,140,140,0.35)";
+  g.beginPath(); g.ellipse(70, 150, 16, 10, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(186, 150, 16, 10, 0, 0, Math.PI * 2); g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeOneCube() {
+  const size = 1.0;
+  const geo = new RoundedBoxGeometry(size, size, size, 4, 0.12);
+  const faceTex = makeFaceTexture();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xe74c3c,
+    roughness: 0.38,
+    metalness: 0.08,
+  });
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0xe74c3c,
+    roughness: 0.38,
+    metalness: 0.08,
+    map: faceTex,
+  });
+  // RoundedBox uses BoxGeometry face order: +x -x +y -y +z -z ? Actually multi-material on RoundedBox may not map cleanly.
+  // Use single material + plane decal for face instead.
+  const mesh = new THREE.Mesh(geo, bodyMat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const face = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.72, 0.72),
+    new THREE.MeshStandardMaterial({
+      map: faceTex,
+      transparent: true,
+      roughness: 0.5,
+      metalness: 0,
+      depthWrite: false,
+    })
+  );
+  face.position.set(0, 0.02, size / 2 + 0.01);
+  mesh.add(face);
+
+  // small "1" badge
+  const badge = new THREE.Mesh(
+    new THREE.CircleGeometry(0.18, 20),
+    new THREE.MeshStandardMaterial({ color: 0xfff8e7, roughness: 0.35, metalness: 0.05, emissive: 0xfff0c8, emissiveIntensity: 0.15 })
+  );
+  badge.position.set(0.32, -0.32, size / 2 + 0.015);
+  mesh.add(badge);
+  const canvas1 = document.createElement("canvas");
+  canvas1.width = canvas1.height = 64;
+  const cg = canvas1.getContext("2d");
+  cg.fillStyle = "#c0392b";
+  cg.font = "bold 44px system-ui,sans-serif";
+  cg.textAlign = "center";
+  cg.textBaseline = "middle";
+  cg.fillText("1", 32, 34);
+  const t1 = new THREE.CanvasTexture(canvas1);
+  t1.colorSpace = THREE.SRGBColorSpace;
+  const num = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.22),
+    new THREE.MeshBasicMaterial({ map: t1, transparent: true })
+  );
+  num.position.z = 0.01;
+  badge.add(num);
+
+  const wrap = new THREE.Group();
+  wrap.add(mesh);
+  wrap.position.set(0, size / 2, 3.0);
+  wrap.userData = { size, homeY: size / 2, liftY: size / 2 + 0.35, mesh };
+  scene.add(wrap);
+  return wrap;
+}
+
+const one = makeOneCube();
+
+// tray + pad for build phase
+const tray = new THREE.Group();
+{
+  const base = new THREE.Mesh(
+    new RoundedBoxGeometry(2.2, 0.25, 1.6, 3, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0xf5efe0, roughness: 0.7, metalness: 0.05 })
+  );
+  base.position.y = 0.12;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  tray.add(base);
+  tray.position.set(-2.4, 0, 3.6);
+  tray.visible = false;
+  scene.add(tray);
+}
+
+const pad = new THREE.Group();
+{
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.55, 0.72, 48),
+    new THREE.MeshStandardMaterial({
+      color: 0xe74c3c, transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.6,
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.02;
+  pad.add(ring);
+  const plate = new THREE.Mesh(
+    new THREE.CircleGeometry(0.55, 32),
+    new THREE.MeshStandardMaterial({
+      color: 0xffd5cf, transparent: true, opacity: 0.35, roughness: 0.8, side: THREE.DoubleSide,
+    })
+  );
+  plate.rotation.x = -Math.PI / 2;
+  plate.position.y = 0.015;
+  pad.add(plate);
+  // floating "1"
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "rgba(192,57,43,0.55)";
+  g.font = "bold 90px system-ui";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText("1", 64, 72);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.7, 0.7),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+  );
+  label.rotation.x = -Math.PI / 2;
+  label.position.y = 0.03;
+  pad.add(label);
+  pad.userData.label = label;
+  pad.position.set(0.6, 0, 1.2);
+  pad.visible = false;
+  scene.add(pad);
+}
+
+const trayCube = makeOneCube();
+trayCube.visible = false;
+trayCube.position.set(-2.4, 0.5, 3.6);
+
+// ---------- particles (celebrate) ----------
+const confetti = [];
+function spawnConfetti(n = 50) {
+  confetti.forEach((p) => scene.remove(p.mesh));
+  confetti.length = 0;
+  const colors = [0xe74c3c, 0xf1c40f, 0x3498db, 0x2ecc71, 0x9b59b6, 0xffffff];
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.08, 0.04),
+      new THREE.MeshStandardMaterial({ color: colors[i % colors.length], roughness: 0.5 })
+    );
+    m.position.set((Math.random() - 0.5) * 3, 4 + Math.random() * 2, (Math.random() - 0.5) * 3);
+    scene.add(m);
+    confetti.push({
+      mesh: m,
+      v: new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2),
+      spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()),
+    });
+  }
+}
+
+// ---------- UI helpers ----------
+function showSpeech(text, ms = 2800) {
+  speechText.textContent = text;
+  speechEl.hidden = false;
+  clearTimeout(speechTimer);
+  if (ms > 0) speechTimer = setTimeout(() => { speechEl.hidden = true; }, ms);
+}
+function hideSpeech() {
+  speechEl.hidden = true;
+  clearTimeout(speechTimer);
+}
+function showHint(t, ms = 2000) {
+  hintEl.textContent = t;
+  hintEl.hidden = false;
+  clearTimeout(showHint._t);
+  if (ms > 0) showHint._t = setTimeout(() => { hintEl.hidden = true; }, ms);
+}
+
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---------- raycasting / drag ----------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPoint = new THREE.Vector3();
+let dragging = null; // 'one' | 'tray'
+let dragOffset = new THREE.Vector3();
+let pointerDown = false;
+
+function setPointerFromEvent(e) {
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width;
+  const y = (e.clientY - r.top) / r.height;
+  pointer.x = x * 2 - 1;
+  pointer.y = -(y * 2 - 1);
+}
+
+function projectToGround() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.ray.intersectPlane(groundPlane, hitPoint);
+}
+
+function pickProp() {
+  raycaster.setFromCamera(pointer, camera);
+  const hits = [];
+  for (const id of Object.keys(props)) {
+    const p = props[id];
+    const hs = raycaster.intersectObject(p.group, true);
+    if (hs.length) hits.push({ id, dist: hs[0].distance });
+  }
+  hits.sort((a, b) => a.dist - b.dist);
+  return hits[0]?.id || null;
+}
+
+function pickCube(group) {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObject(group, true).length > 0;
+}
+
+async function ensureAudio() {
+  await audio.unlock();
+}
+
+function onPointerDown(e) {
+  if (phase === PHASE.TITLE || phase === PHASE.CELEBRATE) return;
+  if (endcard.hidden === false) return;
+  e.preventDefault();
+  ensureAudio();
+  setPointerFromEvent(e);
+  pointerDown = true;
+
+  if (phase === PHASE.INTRO) {
+    advanceIntro();
+    return;
+  }
+
+  if (phase === PHASE.EXPLORE) {
+    const pid = pickProp();
+    if (pid) {
+      onTapProp(pid);
+      return;
+    }
+    if (pickCube(one)) {
+      dragging = "one";
+      canvas.classList.add("grabbing");
+      projectToGround();
+      dragOffset.copy(one.position).sub(hitPoint);
+      dragOffset.y = 0;
+      one.position.y = one.userData.liftY;
+      audio.pickup();
+    }
+    return;
+  }
+
+  if (phase === PHASE.BUILD && !buildPlaced) {
+    if (pickCube(trayCube)) {
+      dragging = "tray";
+      canvas.classList.add("grabbing");
+      projectToGround();
+      dragOffset.copy(trayCube.position).sub(hitPoint);
+      dragOffset.y = 0;
+      trayCube.position.y = trayCube.userData.liftY;
+      audio.pickup();
+    }
+  }
+}
+
+function onPointerMove(e) {
+  if (!pointerDown || !dragging) return;
+  setPointerFromEvent(e);
+  if (!projectToGround()) return;
+  const target = dragging === "one" ? one : trayCube;
+  const x = THREE.MathUtils.clamp(hitPoint.x + dragOffset.x, -7, 7);
+  const z = THREE.MathUtils.clamp(hitPoint.z + dragOffset.z, -5, 6);
+  target.position.x = x;
+  target.position.z = z;
+  target.position.y = target.userData.liftY;
+}
+
+function onPointerUp(e) {
+  if (!pointerDown) return;
+  pointerDown = false;
+  canvas.classList.remove("grabbing");
+  if (!dragging) return;
+  const target = dragging === "one" ? one : trayCube;
+  const kind = dragging;
+  dragging = null;
+
+  if (kind === "tray" && phase === PHASE.BUILD && !buildPlaced) {
+    const dx = target.position.x - pad.position.x;
+    const dz = target.position.z - pad.position.z;
+    if (Math.hypot(dx, dz) < 0.85) {
+      target.position.set(pad.position.x, target.userData.homeY, pad.position.z);
+      buildPlaced = true;
+      pad.userData.label.visible = false;
+      audio.putdown();
+      audio.success();
+      showSpeech("正好一块！这就是「一」。", 2200);
+      setTimeout(() => startCelebrate(), 1000);
+      return;
+    }
+    // bounce back
+    target.position.set(-2.4, target.userData.homeY, 3.6);
+    audio.bounce();
+    showSpeech("轻轻放到光圈里哦～", 1800);
+    return;
+  }
+
+  target.position.y = target.userData.homeY;
+  audio.putdown();
+}
+
+canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
+window.addEventListener("pointermove", onPointerMove, { passive: false });
+window.addEventListener("pointerup", onPointerUp, { passive: false });
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+function onTapProp(id) {
+  if (phase !== PHASE.EXPLORE) return;
+  const p = props[id];
+  if (!exploreDone[id]) {
+    exploreDone[id] = true;
+    progressEl.querySelector(`[data-id="${id}"]`)?.classList.add("done");
+    if (p.labelSprite) p.labelSprite.visible = false;
+    audio.countOne();
+    // pulse scale
+    p.group.userData.pulse = performance.now();
+    showSpeech(`${p.label} —— 1 个！`, 1600);
+    if (exploreDone.sun && exploreDone.tree && exploreDone.bee) {
+      setTimeout(() => startBuild(), 800);
+    }
+  } else {
+    audio.countOne();
+    showSpeech(`还是 1 个${p.label}。`, 1200);
+  }
+}
+
+// ---------- phases ----------
+function startIntro() {
+  phase = PHASE.INTRO;
+  introStep = 0;
+  overlay.hidden = true;
+  endcard.hidden = true;
+  progressEl.hidden = true;
+  tray.visible = false;
+  pad.visible = false;
+  trayCube.visible = false;
+  one.visible = true;
+  one.position.set(0, one.userData.homeY, 3.0);
+  one.scale.setScalar(0.01);
+  one.userData.spawnT = performance.now();
+  // camera push-in
+  camDesired.copy(camHome);
+  camAnim = {
+    t0: performance.now(),
+    dur: 1800,
+    from: camHome.clone().add(new THREE.Vector3(2.5, 4, 7)),
+    to: camHome.clone(),
+  };
+  audio.appear();
+  showSpeech("你好！我是「一」。", 0);
+  showHint("点一下继续", 0);
+}
+
+function advanceIntro() {
+  introStep++;
+  audio.ui();
+  if (introStep === 1) {
+    showSpeech("只有一块。一就是一。", 0);
+  } else if (introStep === 2) {
+    showSpeech("拖我到处走走，再点点太阳、树和蜜蜂——每样都是 1 个！", 0);
+  } else {
+    hintEl.hidden = true;
+    startExplore();
+  }
+}
+
+function startExplore() {
+  phase = PHASE.EXPLORE;
+  exploreDone = { sun: false, tree: false, bee: false };
+  progressEl.querySelectorAll("span").forEach((s) => s.classList.remove("done"));
+  progressEl.hidden = false;
+  for (const id of Object.keys(props)) {
+    if (props[id].labelSprite) props[id].labelSprite.visible = true;
+  }
+  showSpeech("点一点：太阳、树、蜜蜂。每样都是「1」～", 3200);
+}
+
+function startBuild() {
+  phase = PHASE.BUILD;
+  buildPlaced = false;
+  progressEl.hidden = true;
+  for (const id of Object.keys(props)) {
+    if (props[id].labelSprite) props[id].labelSprite.visible = false;
+  }
+  one.visible = false;
+  tray.visible = true;
+  pad.visible = true;
+  pad.userData.label.visible = true;
+  trayCube.visible = true;
+  trayCube.position.set(-2.4, trayCube.userData.homeY, 3.6);
+  showSpeech("从积木盒拖出一块，放到光圈上，做出「一」。", 3800);
+  // gentle camera nudge
+  camDesired.set(0.5, 7.8, 10.2);
+  camAnim = {
+    t0: performance.now(),
+    dur: 900,
+    from: camera.position.clone(),
+    to: camDesired.clone(),
+  };
+}
+
+function startCelebrate() {
+  phase = PHASE.CELEBRATE;
+  hideSpeech();
+  spawnConfetti(55);
+  one.visible = true;
+  one.position.set(0, one.userData.homeY, 0.5);
+  one.scale.setScalar(1);
+  trayCube.visible = false;
+  tray.visible = false;
+  pad.visible = false;
+  setTimeout(() => { endcard.hidden = false; }, 900);
+}
+
+btnStart.addEventListener("click", async () => {
+  await ensureAudio();
+  audio.ui();
+  startIntro();
+});
+btnReplay.addEventListener("click", async () => {
+  await ensureAudio();
+  audio.ui();
+  confetti.forEach((p) => scene.remove(p.mesh));
+  confetti.length = 0;
+  endcard.hidden = true;
+  startIntro();
+});
+btnNext.addEventListener("click", async () => {
+  await ensureAudio();
+  audio.ui();
+  showSpeech("下一集还在准备中，先再玩一遍「一」吧！", 2200);
+});
+btnMute.addEventListener("click", async () => {
+  await ensureAudio();
+  audio.setMuted(!audio.muted);
+  btnMute.classList.toggle("muted", audio.muted);
+  btnMute.textContent = audio.muted ? "✕" : "♪";
+});
+
+// ---------- animate ----------
+const clock = new THREE.Clock();
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const now = performance.now();
+
+  // camera anim
+  if (camAnim) {
+    const u = Math.min(1, (now - camAnim.t0) / camAnim.dur);
+    const e = easeInOut(u);
+    camera.position.lerpVectors(camAnim.from, camAnim.to, e);
+    camera.lookAt(camTarget);
+    if (u >= 1) camAnim = null;
+  } else if (phase !== PHASE.TITLE && !dragging) {
+    // gentle breathing around desired framing
+    const ox = Math.sin(t * 0.15) * 0.22;
+    const oy = Math.sin(t * 0.12) * 0.08;
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, camDesired.x + ox, 1.2, dt);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, camDesired.y + oy, 1.2, dt);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, camDesired.z, 1.2, dt);
+    camera.lookAt(camTarget);
+  }
+
+  // spawn pop for One
+  if (one.visible && one.userData.spawnT) {
+    const u = Math.min(1, (now - one.userData.spawnT) / 500);
+    const s = easeInOut(u);
+    one.scale.setScalar(s);
+    one.position.y = one.userData.homeY + (1 - s) * 1.2;
+    one.rotation.y = (1 - s) * Math.PI;
+    if (u >= 1) {
+      one.userData.spawnT = 0;
+      one.scale.setScalar(1);
+      one.position.y = dragging === "one" ? one.userData.liftY : one.userData.homeY;
+      one.rotation.y = 0;
+    }
+  } else if (one.visible && !dragging) {
+    one.position.y = one.userData.homeY + Math.sin(t * 2.0) * 0.04;
+    one.rotation.y = Math.sin(t * 0.8) * 0.08;
+  }
+
+  // bee bob + wings
+  const bee = props.bee.group;
+  bee.position.y = 1.55 + Math.sin(t * 3.2) * 0.18;
+  bee.position.x = 1.7 + Math.sin(t * 0.7) * 0.25;
+  bee.rotation.y = Math.sin(t * 0.7) * 0.4;
+  if (bee.userData.wings) {
+    const flap = Math.sin(t * 28) * 0.5;
+    bee.userData.wings[0].rotation.z = -0.4 + flap;
+    bee.userData.wings[1].rotation.z = 0.4 - flap;
+  }
+
+  // sun rays spin
+  props.sun.group.children.forEach((ch, i) => {
+    if (i === 0 || ch.isLight) return;
+    ch.rotation.z += dt * 0.4;
+  });
+
+  // prop pulse
+  for (const id of Object.keys(props)) {
+    const g = props[id].group;
+    if (g.userData.pulse) {
+      const u = Math.min(1, (now - g.userData.pulse) / 400);
+      const s = 1 + Math.sin(u * Math.PI) * 0.18;
+      g.scale.setScalar(s);
+      if (u >= 1) { g.scale.setScalar(1); g.userData.pulse = 0; }
+    }
+  }
+
+  // pad breathe
+  if (pad.visible) {
+    const s = 1 + Math.sin(t * 2.5) * 0.04;
+    pad.scale.set(s, 1, s);
+  }
+
+  // confetti
+  for (const p of confetti) {
+    p.v.y -= 4.5 * dt;
+    p.mesh.position.addScaledVector(p.v, dt);
+    p.mesh.rotation.x += p.spin.x * dt * 4;
+    p.mesh.rotation.y += p.spin.y * dt * 4;
+  }
+
+  // title idle: slow camera
+  if (phase === PHASE.TITLE) {
+    camera.position.set(
+      camHome.x + Math.sin(t * 0.25) * 1.2,
+      camHome.y + 0.4,
+      camHome.z + Math.cos(t * 0.25) * 0.8
+    );
+    camera.lookAt(camTarget);
+    one.position.set(0, one.userData.homeY + Math.sin(t * 2) * 0.06, 2.6);
+    one.rotation.y = t * 0.4;
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// boot title scene
+one.visible = true;
+requestAnimationFrame(tick);
