@@ -109,6 +109,31 @@ function claim(gltf: { scene: THREE.Object3D }, name: string): THREE.Object3D {
   return obj;
 }
 
+function greenContact(width: number, depth: number): THREE.Mesh {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法绘制阴影');
+  const grd = ctx.createRadialGradient(size / 2, size / 2, size * 0.08, size / 2, size / 2, size * 0.5);
+  grd.addColorStop(0, 'rgba(16, 68, 22, 0.55)');
+  grd.addColorStop(0.55, 'rgba(18, 62, 20, 0.2)');
+  grd.addColorStop(1, 'rgba(16, 58, 18, 0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, depth),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.02;
+  mesh.renderOrder = 2;
+  return mesh;
+}
+
 function shade(root: THREE.Object3D): void {
   root.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
@@ -118,7 +143,7 @@ function shade(root: THREE.Object3D): void {
     obj.receiveShadow = !transparent;
     for (const mat of list) {
       if (mat instanceof THREE.MeshStandardMaterial) {
-        mat.envMapIntensity = mat.transparent ? 0.12 : 0.18;
+        mat.envMapIntensity = mat.transparent ? 0.08 : 0.1;
         if (!mat.transparent && mat.roughness < 0.42) mat.roughness = 0.48;
       }
     }
@@ -158,6 +183,11 @@ export async function loadFindProps(scene: THREE.Scene, reduceMotion: boolean): 
     hit.scale.setScalar(1 / spot.scale);
     const badge = makeBadge(badgeTex, BADGE_Y[id]);
     root.add(visual, hit, badge);
+    if (id === 'flower') {
+      const blob = greenContact(2.3, 1.7);
+      blob.scale.setScalar(1 / spot.scale);
+      root.add(blob);
+    }
     const rig: PropRig = {
       id,
       root,

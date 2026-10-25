@@ -13,7 +13,7 @@ export type Actors = {
   shadowMat: THREE.MeshBasicMaterial;
   pad: THREE.Object3D;
   ringMat: THREE.MeshStandardMaterial | null;
-  /** Extra concentric vermillion bands. The glTF ring is `ringMat`. */
+  /** Kept for the pulse loop. The pad no longer adds extra hard rings. */
   bandMats: THREE.MeshStandardMaterial[];
   padDigit: THREE.Object3D | null;
   padDigitBaseY: number;
@@ -29,9 +29,9 @@ function blobTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('无法绘制阴影');
   const grd = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.5);
-  grd.addColorStop(0, 'rgba(42, 28, 18, 0.66)');
-  grd.addColorStop(0.42, 'rgba(42, 28, 18, 0.24)');
-  grd.addColorStop(1, 'rgba(48, 32, 24, 0)');
+  grd.addColorStop(0, 'rgba(12, 62, 18, 0.88)');
+  grd.addColorStop(0.42, 'rgba(16, 58, 18, 0.42)');
+  grd.addColorStop(1, 'rgba(16, 58, 18, 0)');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, size, size);
   const tex = new THREE.CanvasTexture(canvas);
@@ -43,9 +43,21 @@ function tuneStandard(mat: THREE.MeshStandardMaterial, intensity: number): void 
   mat.envMapIntensity = intensity;
   // Body albedo bakes a peach highlight. Pull green/blue down so the block
   // reads as the mood-board crimson instead of orange glass.
-  if (mat.name === 'BodyPlastic') mat.color.setRGB(1.08, 0.24, 0.26);
-  else if (mat.name === 'FootPlastic') mat.color.setRGB(1.02, 0.42, 0.4);
-  if (mat.transparent) {
+  if (mat.name === 'BodyPlastic') {
+    mat.color.setRGB(1.08, 0.24, 0.26);
+    mat.roughness = 0.4;
+    mat.metalness = 0.04;
+    mat.transparent = false;
+    mat.opacity = 1;
+    mat.depthWrite = true;
+  } else if (mat.name === 'FootPlastic') {
+    mat.color.setRGB(1.02, 0.42, 0.4);
+    mat.roughness = 0.42;
+    mat.metalness = 0.04;
+    mat.transparent = false;
+    mat.opacity = 1;
+    mat.depthWrite = true;
+  } else if (mat.transparent) {
     mat.depthWrite = false;
   }
 }
@@ -87,9 +99,9 @@ function prepareOne(one: THREE.Object3D): { pick: THREE.Object3D[]; eyes: EyeRig
       return;
     }
 
-    if (obj.name === 'EyeL' || obj.name === 'EyeR') tuneStandard(mat, 0.4);
+    if (obj.name === 'EyeL' || obj.name === 'EyeR') tuneStandard(mat, 0.28);
     else if (parent === 'EyeL' || parent === 'EyeR') tuneStandard(mat, 0.16);
-    else if (obj.name === 'FootL' || obj.name === 'FootR') tuneStandard(mat, 0.2);
+    else if (obj.name === 'FootL' || obj.name === 'FootR') tuneStandard(mat, 0.18);
     else if (obj.name === 'Smile') tuneStandard(mat, 0.12);
     else if (mat.transparent) tuneStandard(mat, 0.1);
     else tuneStandard(mat, 0.22);
@@ -118,15 +130,15 @@ function preparePad(pad: THREE.Object3D): {
     if (!(obj instanceof THREE.Mesh)) return;
     const mat = obj.material;
     if (Array.isArray(mat) || !(mat instanceof THREE.MeshStandardMaterial)) return;
-    tuneStandard(mat, mat.transparent ? 0.15 : 0.35);
+    tuneStandard(mat, mat.transparent ? 0.12 : 0.22);
     obj.castShadow = false;
     obj.receiveShadow = false;
     if (obj.name === 'Ring') {
       ringMat = mat;
-      mat.color.set('#e4372c');
-      mat.emissive.set('#c43224');
-      mat.emissiveIntensity = 0.3;
-      mat.roughness = 0.46;
+      mat.color.set('#d4533a');
+      mat.emissive.set('#c43a28');
+      mat.emissiveIntensity = 0.12;
+      mat.roughness = 0.55;
       mat.metalness = 0.02;
       mat.opacity = 1;
       mat.transparent = false;
@@ -149,34 +161,34 @@ function preparePad(pad: THREE.Object3D): {
   return { ringMat, padDigit, padDigitBaseY: padDigit?.position.y ?? 0.1 };
 }
 
-function addPadBands(pad: THREE.Object3D): THREE.MeshStandardMaterial[] {
-  const bands = [
-      { inner: 0.34, outer: 0.5, color: '#e23d2e', emissive: '#b4231c', intensity: 0.28 },
-    { inner: 0.9, outer: 1.06, color: '#ef4d34', emissive: '#c42e22', intensity: 0.34 },
-    { inner: 1.18, outer: 1.32, color: '#c43228', emissive: '#9a241c', intensity: 0.22 },
-  ];
-  const mats: THREE.MeshStandardMaterial[] = [];
-  bands.forEach((band, index) => {
-    const mat = new THREE.MeshStandardMaterial({
-      color: band.color,
-      emissive: band.emissive,
-      emissiveIntensity: band.intensity,
-      roughness: 0.46,
-      metalness: 0.02,
-      side: THREE.DoubleSide,
-    });
-    mat.userData.baseEmissive = band.intensity;
-    const mesh = new THREE.Mesh(new THREE.RingGeometry(band.inner, band.outer, 72), mat);
-    mesh.name = 'PadRingBand';
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.034 + index * 0.003;
-    mesh.renderOrder = 3;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    pad.add(mesh);
-    mats.push(mat);
-  });
-  return mats;
+function embeddedGlowTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法绘制光圈');
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const u = (x + 0.5) / size - 0.5;
+      const v = (y + 0.5) / size - 0.5;
+      const d = Math.hypot(u, v) * 2;
+      const halo = Math.exp(-(((d - 0.58) / 0.18) ** 2));
+      const wash = d < 0.72 ? Math.exp(-(((d - 0.36) / 0.34) ** 2)) : 0;
+      const alpha = Math.min(1, halo * 0.42 + wash * 0.16);
+      const i = (y * size + x) * 4;
+      data[i] = 214;
+      data[i + 1] = 54;
+      data[i + 2] = 40;
+      data[i + 3] = Math.round(alpha * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function addPadGlow(pad: THREE.Object3D): {
@@ -184,19 +196,29 @@ function addPadGlow(pad: THREE.Object3D): {
   glow: THREE.PointLight;
   bandMats: THREE.MeshStandardMaterial[];
 } {
-  const bandMats = addPadBands(pad);
-  const glowMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
-  const glow = new THREE.PointLight(0xff3a2c, 0.03, 2.2, 2);
-  glow.position.set(0, 0.2, 0);
-  pad.add(glow);
-  return { glowMat, glow, bandMats };
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: embeddedGlowTexture(),
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    toneMapped: true,
+  });
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(2.45, 2.45), glowMat);
+  disc.name = 'PadGlow';
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.02;
+  disc.renderOrder = 2;
+  const glow = new THREE.PointLight(0xff4a38, 0.08, 2.3, 2);
+  glow.position.set(0, 0.16, 0);
+  pad.add(disc, glow);
+  return { glowMat, glow, bandMats: [] };
 }
 
 export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Promise<Actors> {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture;
-  scene.environmentIntensity = 0.34;
+  scene.environmentIntensity = 0.2;
   room.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
     obj.geometry.dispose();
@@ -226,7 +248,7 @@ export async function loadActors(scene: THREE.Scene, renderer: THREE.WebGLRender
     depthWrite: false,
     toneMapped: false,
   });
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.92), shadowMat);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 1.12), shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.018;
   shadow.renderOrder = 2;

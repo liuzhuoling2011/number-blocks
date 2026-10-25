@@ -22,7 +22,7 @@ function shade(root: THREE.Object3D, cast: boolean): void {
     obj.receiveShadow = true;
     for (const mat of list) {
       if (!(mat instanceof THREE.MeshStandardMaterial)) continue;
-      mat.envMapIntensity = 0.16;
+      mat.envMapIntensity = 0.1;
       const meadow =
         mat.name === 'Grass' ||
         mat.name === 'GrassEdge' ||
@@ -30,8 +30,8 @@ function shade(root: THREE.Object3D, cast: boolean): void {
         mat.name === 'PadGrassPlate' ||
         mat.name === 'Mound';
       const canopy = mat.name === 'Canopy' || mat.name === 'CanopyDark';
-      if (meadow) mat.color.multiply(new THREE.Color().setRGB(1.08, 1.04, 0.82));
-      else if (canopy) mat.color.multiply(new THREE.Color().setRGB(1.06, 1.0, 0.72));
+      if (meadow) mat.color.multiply(new THREE.Color().setRGB(1.72, 1.24, 1.42));
+      else if (canopy) mat.color.multiply(new THREE.Color().setRGB(1.08, 1.02, 0.7));
       if (!mat.transparent && mat.roughness < 0.45) mat.roughness = 0.5;
     }
   });
@@ -96,12 +96,12 @@ function buildMeadowField(grass: THREE.MeshStandardMaterial): THREE.Mesh {
       Math.sin((wx + wz) * 0.1) * 0.03;
     const amp = THREE.MathUtils.smoothstep(r, 4.6, 12);
     pos.setZ(i, wave * amp);
-    const sun = 0.88 + 0.16 * (0.5 + 0.5 * Math.sin(wx * 0.16 + 0.7));
-    const patch = 0.92 + 0.08 * Math.sin(wz * 0.21 + wx * 0.05);
+    const sun = 1.06 + 0.08 * Math.sin(wx * 0.16 + 0.7);
+    const patch = 1.0 + 0.05 * Math.sin(wz * 0.21 + wx * 0.05);
     const tone = sun * patch;
     colors[i * 3] = tone;
     colors[i * 3 + 1] = tone;
-    colors[i * 3 + 2] = tone * 0.96;
+    colors[i * 3 + 2] = tone;
   }
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -129,7 +129,11 @@ function openGround(ground: THREE.Object3D): void {
     if (!(obj instanceof THREE.Mesh)) return;
     const list = Array.isArray(obj.material) ? obj.material : [obj.material];
     const hide = list.some(
-      (mat) => mat.name === 'GrassEdge' || mat.name === 'PadSurround' || mat.name === 'PadGrassPlate',
+      (mat) =>
+        mat.name === 'GrassEdge' ||
+        mat.name === 'PadSurround' ||
+        mat.name === 'PadGrassPlate' ||
+        mat.name === 'Dirt',
     );
     if (hide) obj.visible = false;
   });
@@ -175,8 +179,23 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
   const hut = claim(hutGltf, 'HomeHut');
   hut.position.set(HUT.x, HUT.y, HUT.z);
   hut.rotation.y = HUT.rotY;
+  hut.scale.setScalar(HUT.scale);
   shade(hut, true);
   scene.add(hut);
+  const hutBlob = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.7, 1.25),
+    new THREE.MeshBasicMaterial({
+      color: 0x123c16,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  hutBlob.rotation.x = -Math.PI / 2;
+  hutBlob.position.set(HUT.x, 0.02, HUT.z + 0.15);
+  hutBlob.scale.set(HUT.scale, HUT.scale, 1);
+  scene.add(hutBlob);
 
   const treeSrc = claim(treeGltf, 'TreeA');
   const rockSrc = claim(rockGltf, 'RockA');
@@ -184,7 +203,7 @@ export async function loadScenery(scene: THREE.Scene): Promise<Scenery> {
   const trees = scatter(scene, treeSrc, TREES, true);
   const rocks = scatter(scene, rockSrc, ROCKS, true);
   const clumps = scatter(scene, grassSrc, GRASS, false);
-  const placed = [field, ground, hut, ...trees, ...rocks, ...clumps];
+  const placed = [field, ground, hut, hutBlob, ...trees, ...rocks, ...clumps];
 
   return {
     dispose() {

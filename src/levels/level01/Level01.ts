@@ -267,7 +267,7 @@ export class Level01 {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setClearColor(0xf7f1e6);
+    this.renderer.setClearColor(0xf4efe6);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
@@ -510,13 +510,13 @@ export class Level01 {
     const amp =
       (this.phase === 'home' ? 1.2 : this.phase === 'clear' ? 0.7 : 0.32) + this.padBoost * 0.85;
     const wave = 0.86 + pulse * 0.28 * amp;
-    if (actors.ringMat) actors.ringMat.emissiveIntensity = 0.3 * wave;
+    if (actors.ringMat) actors.ringMat.emissiveIntensity = 0.12 * wave;
     for (const mat of actors.bandMats) {
       const base = typeof mat.userData.baseEmissive === 'number' ? mat.userData.baseEmissive : 0.5;
       mat.emissiveIntensity = base * wave;
     }
-    actors.glowMat.opacity = 0;
-    actors.glow.intensity = 0.03 * wave;
+    actors.glowMat.opacity = 0.62 + pulse * 0.1 * amp;
+    actors.glow.intensity = 0.07 * wave;
 
     this.badgeHide = THREE.MathUtils.damp(this.badgeHide, this.wantBadge, 7, dt);
     if (actors.padDigit) {
